@@ -13,8 +13,11 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 ENV PORT=5000
 ENV PYTHONUNBUFFERED=1
 
+# Change to backend directory
+WORKDIR /app/backend
+
 # Expose port
 EXPOSE 5000
 
 # Start command
-CMD cd backend && python app.py
+CMD ["python", "app.py"]
