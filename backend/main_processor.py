@@ -99,14 +99,15 @@ class GrammarCheckProcessor:
             print("=" * 70)
             print(f"입력 파일: {input_pdf_path}")
             print(f"출력 파일: {output_pdf_path}")
-            print(f"발견된 오류: {len(errors)}개")
+            print(f"감지된 오류: {len(errors)}개")
+            print(f"PDF에 표시된 오류: {len(annotations)}개")
 
             return {
                 'success': True,
-                'errors_found': len(errors),
+                'errors_found': len(annotations),  # 실제 PDF에 표시된 오류 개수
                 'output_pdf': output_pdf_path,
                 'annotations': annotations,
-                'message': f'{len(errors)}개의 맞춤법 오류를 발견했습니다.'
+                'message': f'{len(annotations)}개의 맞춤법 오류를 발견했습니다.'
             }
 
         except Exception as e:
