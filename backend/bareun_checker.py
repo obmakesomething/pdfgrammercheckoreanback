@@ -32,6 +32,8 @@ class BareunSpellChecker:
             raise ImportError("bareunpy가 설치되지 않았습니다: pip install bareunpy")
 
         self.api_key = api_key or os.getenv('BAREUN_API_KEY')
+        print(f"DEBUG: BAREUN_API_KEY = {self.api_key[:10] if self.api_key else 'None'}...")
+        print(f"DEBUG: All env vars: {list(os.environ.keys())[:10]}")
         if not self.api_key:
             raise ValueError("BAREUN_API_KEY가 설정되지 않았습니다")
 
