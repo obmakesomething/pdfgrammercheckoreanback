@@ -1,0 +1,31 @@
+# robots.txt for pdfgrammercheckorean.site
+
+# 모든 검색엔진 크롤러 허용
+User-agent: *
+Allow: /
+
+# 특정 파일/폴더 제외
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/
+
+# 사이트맵 위치
+Sitemap: https://pdfgrammercheckorean.site/sitemap.xml
+
+# 크롤 속도 제한 (옵션)
+Crawl-delay: 1
+
+# 구글봇 특화 설정
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+
+# 네이버 검색봇
+User-agent: Yeti
+Allow: /
+Disallow: /api/
+
+# 다음(Kakao) 검색봇
+User-agent: Daumoa
+Allow: /
+Disallow: /api/

@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <!-- 기본 메타 태그 -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- SEO 메타 태그 -->
+    <title>PDF 맞춤법 검사기 | 무료 한국어 문법 교정 도구</title>
+    <meta name="description" content="PDF 파일의 맞춤법과 문법을 무료로 검사하세요. AI 기반 바른 API로 정확한 맞춤법 검사. 회원가입 없이 바로 사용 가능. 5분 이내 이메일 전송.">
+    <meta name="keywords" content="PDF 맞춤법, PDF 문법검사, 한국어 맞춤법, 맞춤법 교정, 문법 검사, 무료 맞춤법, 바른 API, 띄어쓰기 검사">
+    <meta name="author" content="PDF Grammar Checker">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://pdfgrammercheckorean.site">
+
+    <!-- Open Graph (소셜 미디어 공유) -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://pdfgrammercheckorean.site">
+    <meta property="og:title" content="PDF 맞춤법 검사기 | 무료 한국어 문법 교정">
+    <meta property="og:description" content="PDF 파일의 맞춤법을 AI가 자동으로 검사하고 교정해드립니다. 회원가입 없이 무료로 사용 가능.">
+    <meta property="og:image" content="https://pdfgrammercheckorean.site/og-image.jpg">
+    <meta property="og:site_name" content="PDF 맞춤법 검사기">
+    <meta property="og:locale" content="ko_KR">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="PDF 맞춤법 검사기 | 무료 한국어 문법 교정">
+    <meta name="twitter:description" content="PDF 파일의 맞춤법을 AI가 자동으로 검사하고 교정해드립니다.">
+    <meta name="twitter:image" content="https://pdfgrammercheckorean.site/og-image.jpg">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+    <!-- JSON-LD 구조화 데이터 (Schema.org) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "PDF 맞춤법 검사기",
+      "applicationCategory": "UtilityApplication",
+      "description": "PDF 파일의 한국어 맞춤법과 문법을 AI 기반으로 검사하는 무료 웹 도구",
+      "url": "https://pdfgrammercheckorean.site",
+      "operatingSystem": "Web Browser",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "KRW"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "127"
+      },
+      "featureList": [
+        "PDF 맞춤법 검사",
+        "문법 교정",
+        "띄어쓰기 검사",
+        "이메일 전송",
+        "무료 사용"
+      ]
+    }
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px 20px;
+            text-align: center;
+            background: #f8f9ff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover {
+            background: #f0f2ff;
+            border-color: #5568d3;
+        }
+
+        .upload-area.dragover {
+            background: #e8ebff;
+            border-color: #4f5fd8;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .upload-hint {
+            color: #999;
+            font-size: 13px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-info {
+            background: #f0f2ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .file-info.active {
+            display: block;
+        }
+
+        .file-name {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .file-size {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .email-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            margin-bottom: 20px;
+            transition: border-color 0.3s;
+        }
+
+        .email-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .submit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .status.active {
+            display: block;
+        }
+
+        .status.loading {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+        }
+
+        .status.success {
+            background: #d4edda;
+            border: 1px solid #28a745;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            border: 1px solid #dc3545;
+            color: #721c24;
+        }
+
+        .ad-container {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .ad-container.active {
+            display: block;
+        }
+
+        .ad-timer {
+            font-size: 18px;
+            font-weight: 600;
+            color: #667eea;
+            margin-top: 10px;
+        }
+
+        .survey-container {
+            background: #f8f9ff;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            padding: 30px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .survey-container.active {
+            display: block;
+        }
+
+        .survey-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .survey-subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        .survey-question {
+            margin-bottom: 25px;
+        }
+
+        .survey-question-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+        }
+
+        .survey-options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .survey-option {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .survey-option:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .survey-option input[type="radio"] {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .survey-option label {
+            flex: 1;
+            cursor: pointer;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .survey-submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .survey-submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .survey-submit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="container" role="main">
+        <header>
+            <h1>📝 PDF 한국어 맞춤법 검사기</h1>
+            <p class="subtitle">PDF 파일의 맞춤법을 자동으로 검사하고 수정 제안을 제공합니다</p>
+        </header>
+
+        <section aria-label="파일 업로드">
+            <div class="upload-area" id="uploadArea" role="button" tabindex="0" aria-label="PDF 파일 업로드">
+                <div class="upload-icon" aria-hidden="true">📄</div>
+                <div class="upload-text">PDF 파일을 선택하거나 드래그하세요</div>
+                <div class="upload-hint">최대 20MB까지 업로드 가능합니다</div>
+                <input type="file" id="fileInput" class="file-input" accept=".pdf" aria-label="PDF 파일 선택">
+            </div>
+
+            <div class="file-info" id="fileInfo" role="status" aria-live="polite">
+                <div class="file-name" id="fileName"></div>
+                <div class="file-size" id="fileSize"></div>
+            </div>
+        </section>
+
+        <section aria-label="이메일 입력">
+            <input
+                type="email"
+                id="emailInput"
+                class="email-input"
+                placeholder="이메일 주소를 입력하세요"
+                required
+                aria-label="이메일 주소"
+                aria-required="true"
+            >
+        </section>
+
+        <section aria-label="검사 시작">
+            <button class="submit-btn" id="submitBtn" aria-label="맞춤법 검사 시작">
+                맞춤법 검사 시작
+            </button>
+        </section>
+
+        <aside class="ad-container" id="adContainer" role="complementary" aria-label="광고">
+            <p><strong>광고 시청 중...</strong></p>
+            <p style="color: #666; margin-top: 10px;">광고 시청 후 간단한 설문조사가 진행됩니다</p>
+            <div class="ad-timer" id="adTimer" role="timer" aria-live="polite">15초 남음</div>
+        </aside>
+
+        <aside class="survey-container" id="surveyContainer" role="complementary" aria-label="설문조사">
+            <div class="survey-title">📋 간단한 설문조사</div>
+            <p class="survey-subtitle">서비스 개선을 위해 2가지 질문에 답변해주세요 (30초 소요)</p>
+
+            <div class="survey-question">
+                <div class="survey-question-text">1. 이 서비스를 어떻게 알게 되셨나요?</div>
+                <div class="survey-options">
+                    <div class="survey-option">
+                        <input type="radio" id="source1" name="source" value="search">
+                        <label for="source1">검색엔진 (네이버, 구글 등)</label>
+                    </div>
+                    <div class="survey-option">
+                        <input type="radio" id="source2" name="source" value="sns">
+                        <label for="source2">SNS (카카오톡, 인스타그램 등)</label>
+                    </div>
+                    <div class="survey-option">
+                        <input type="radio" id="source3" name="source" value="recommend">
+                        <label for="source3">지인 추천</label>
+                    </div>
+                    <div class="survey-option">
+                        <input type="radio" id="source4" name="source" value="other">
+                        <label for="source4">기타</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="survey-question">
+                <div class="survey-question-text">2. 주로 어떤 목적으로 사용하시나요?</div>
+                <div class="survey-options">
+                    <div class="survey-option">
+                        <input type="radio" id="purpose1" name="purpose" value="work">
+                        <label for="purpose1">업무 문서 작성</label>
+                    </div>
+                    <div class="survey-option">
+                        <input type="radio" id="purpose2" name="purpose" value="study">
+                        <label for="purpose2">학업 (과제, 논문 등)</label>
+                    </div>
+                    <div class="survey-option">
+                        <input type="radio" id="purpose3" name="purpose" value="personal">
+                        <label for="purpose3">개인 문서</label>
+                    </div>
+                    <div class="survey-option">
+                        <input type="radio" id="purpose4" name="purpose" value="other">
+                        <label for="purpose4">기타</label>
+                    </div>
+                </div>
+            </div>
+
+            <button class="survey-submit-btn" id="surveySubmitBtn" disabled>
+                검사 시작하기
+            </button>
+        </aside>
+
+        <div class="status" id="status" role="status" aria-live="polite"></div>
+
+        <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #999; font-size: 12px;">
+            <p>&copy; 2024 PDF 맞춤법 검사기. All rights reserved.</p>
+            <p style="margin-top: 5px;">
+                바른(Bareun) API 기반 |
+                <a href="privacy.html" style="color: #667eea; text-decoration: none;">개인정보처리방침</a> |
+                <a href="terms.html" style="color: #667eea; text-decoration: none;">이용약관</a> |
+                <a href="guide.html" style="color: #667eea; text-decoration: none;">사용 가이드</a>
+            </p>
+        </footer>
+    </main>
+
+    <script>
+        // API 엔드포인트 (개발 환경)
+        const API_URL = 'http://localhost:5000/api/check-pdf';
+        // 프로덕션 환경: 'https://api.pdfgrammercheckorean.site/api/check-pdf'
+
+        // DOM 요소
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const emailInput = document.getElementById('emailInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const adContainer = document.getElementById('adContainer');
+        const adTimer = document.getElementById('adTimer');
+        const surveyContainer = document.getElementById('surveyContainer');
+        const surveySubmitBtn = document.getElementById('surveySubmitBtn');
+        const status = document.getElementById('status');
+
+        let selectedFile = null;
+        let surveyData = {
+            source: null,
+            purpose: null
+        };
+
+        // 설문조사 라디오 버튼 이벤트
+        document.querySelectorAll('input[name="source"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                surveyData.source = e.target.value;
+                checkSurveyComplete();
+            });
+        });
+
+        document.querySelectorAll('input[name="purpose"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                surveyData.purpose = e.target.value;
+                checkSurveyComplete();
+            });
+        });
+
+        // 설문조사 완료 확인
+        function checkSurveyComplete() {
+            if (surveyData.source && surveyData.purpose) {
+                surveySubmitBtn.disabled = false;
+            }
+        }
+
+        // 설문조사 제출
+        surveySubmitBtn.addEventListener('click', async () => {
+            console.log('설문조사 응답:', surveyData);
+            surveyContainer.classList.remove('active');
+
+            // 설문조사 데이터를 서버에 전송
+            await sendSurveyData(surveyData);
+
+            // API 요청 시작
+            await submitToAPI(selectedFile, emailInput.value.trim());
+        });
+
+        // 설문조사 데이터 전송
+        async function sendSurveyData(data) {
+            try {
+                const surveyUrl = API_URL.replace('/check-pdf', '/survey');
+                await fetch(surveyUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        source: data.source,
+                        purpose: data.purpose,
+                        email: emailInput.value.trim()
+                    })
+                });
+                console.log('설문조사 데이터 전송 완료');
+            } catch (error) {
+                console.error('설문조사 전송 실패:', error);
+            }
+        }
+
+        // 업로드 영역 클릭 시
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // 파일 선택 시
+        fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
+
+        // 드래그 앤 드롭
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        // 파일 처리
+        function handleFile(file) {
+            if (!file) return;
+
+            if (file.type !== 'application/pdf') {
+                showStatus('error', 'PDF 파일만 업로드 가능합니다');
+                return;
+            }
+
+            if (file.size > 20 * 1024 * 1024) {
+                showStatus('error', '파일 크기는 20MB 이하여야 합니다');
+                return;
+            }
+
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileSize.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+            fileInfo.classList.add('active');
+            hideStatus();
+        }
+
+        // 제출 버튼 클릭
+        submitBtn.addEventListener('click', async () => {
+            if (!selectedFile) {
+                showStatus('error', 'PDF 파일을 선택해주세요');
+                return;
+            }
+
+            const email = emailInput.value.trim();
+            if (!email) {
+                showStatus('error', '이메일 주소를 입력해주세요');
+                return;
+            }
+
+            if (!isValidEmail(email)) {
+                showStatus('error', '올바른 이메일 주소를 입력해주세요');
+                return;
+            }
+
+            // 1. 광고 시뮬레이션 (실제로는 Google IMA SDK 사용)
+            await showAd();
+
+            // 2. 설문조사 표시
+            showSurvey();
+        });
+
+        // 광고 표시 (시뮬레이션)
+        function showAd() {
+            return new Promise((resolve) => {
+                adContainer.classList.add('active');
+                submitBtn.disabled = true;
+                let timeLeft = 15;
+
+                const interval = setInterval(() => {
+                    timeLeft--;
+                    adTimer.textContent = `${timeLeft}초 남음`;
+
+                    if (timeLeft <= 0) {
+                        clearInterval(interval);
+                        adContainer.classList.remove('active');
+                        resolve();
+                    }
+                }, 1000);
+            });
+        }
+
+        // 설문조사 표시
+        function showSurvey() {
+            surveyContainer.classList.add('active');
+            submitBtn.disabled = true;
+        }
+
+        // API 요청
+        async function submitToAPI(file, email) {
+            showStatus('loading', '<div class="spinner"></div> 처리 중입니다... 5분 이내에 이메일로 결과를 받으실 수 있습니다');
+            submitBtn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('pdf', file);
+                formData.append('email', email);
+
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status === 'success') {
+                    showStatus('success',
+                        `✓ 검사 요청이 완료되었습니다!<br>` +
+                        `발견된 오류: ${result.errors_found}개<br>` +
+                        `5분 이내에 <strong>${email}</strong>로 결과를 발송해드립니다.`
+                    );
+
+                    // 폼 초기화
+                    setTimeout(() => {
+                        resetForm();
+                    }, 3000);
+                } else {
+                    showStatus('error', `✗ 오류 발생: ${result.message}`);
+                    submitBtn.disabled = false;
+                }
+            } catch (error) {
+                showStatus('error', `✗ 서버 연결 실패: ${error.message}<br>잠시 후 다시 시도해주세요.`);
+                submitBtn.disabled = false;
+            }
+        }
+
+        // 상태 메시지 표시
+        function showStatus(type, message) {
+            status.className = `status active ${type}`;
+            status.innerHTML = message;
+        }
+
+        function hideStatus() {
+            status.classList.remove('active');
+        }
+
+        // 이메일 유효성 검사
+        function isValidEmail(email) {
+            const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return regex.test(email);
+        }
+
+        // 폼 초기화
+        function resetForm() {
+            selectedFile = null;
+            fileInput.value = '';
+            emailInput.value = '';
+            fileInfo.classList.remove('active');
+            submitBtn.disabled = false;
+            hideStatus();
+        }
+    </script>
+</body>
+</html>

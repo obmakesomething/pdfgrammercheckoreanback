@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+ENV/
+env/
+
+# 환경 변수 (중요!)
+.env
+.env.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 테스트 파일
+test_*.pdf
+*_검사완료.pdf
+
+# 설문조사 응답 데이터
+survey_responses.csv
+
+# 로그
+*.log
+
+# Next.js
+.next/
+out/
+node_modules/
+.vercel/
+
+# 임시 파일
+tmp/
+temp/
+*.tmp
