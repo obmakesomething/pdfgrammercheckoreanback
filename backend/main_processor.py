@@ -10,6 +10,7 @@ from pdf_extractor import SimplePDFExtractor
 from text_preprocessor import TextPreprocessor
 from spell_checker import SpellChecker
 from pdf_annotator import PDFAnnotator
+from pdf_highlighter import PDFHighlighter
 
 
 class GrammarCheckProcessor:
@@ -85,14 +86,15 @@ class GrammarCheckProcessor:
             if len(annotations) > 10:
                 print(f"    ... 외 {len(annotations) - 10}개")
 
-            # 5단계: PDF 주석 생성
-            print("\n[5/5] PDF 주석 생성 중...")
+            # 5단계: PDF 하이라이트 생성
+            print("\n[5/5] PDF 하이라이트 생성 중...")
             if output_pdf_path is None:
                 base_name = os.path.splitext(input_pdf_path)[0]
                 output_pdf_path = f"{base_name}_검사완료.pdf"
 
-            annotator = PDFAnnotator(input_pdf_path, output_pdf_path)
-            annotator.create_simple_annotation(annotations)
+            # PDFHighlighter 사용 (pdfplumber로 정확한 위치 찾기)
+            highlighter = PDFHighlighter(input_pdf_path, output_pdf_path)
+            highlighter.add_highlights(errors)
 
             print("\n" + "=" * 70)
             print("✓ 처리 완료!")

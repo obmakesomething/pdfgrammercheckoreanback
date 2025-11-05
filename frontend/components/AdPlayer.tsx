@@ -75,17 +75,24 @@ export default function AdPlayer({ onAdComplete, onAdError }: AdPlayerProps) {
           }
         }
       )
+      let adCompleted = false
       adsManager.addEventListener(
         window.google.ima.AdEvent.Type.ALL_ADS_COMPLETED,
         () => {
-          onAdComplete()
-          adsManager.destroy()
+          if (!adCompleted) {
+            adCompleted = true
+            onAdComplete()
+            adsManager.destroy()
+          }
         }
       )
       adsManager.addEventListener(
         window.google.ima.AdEvent.Type.COMPLETE,
         () => {
-          onAdComplete()
+          if (!adCompleted) {
+            adCompleted = true
+            onAdComplete()
+          }
         }
       )
 
