@@ -10,7 +10,13 @@ from pdf_extractor import SimplePDFExtractor
 from text_preprocessor import TextPreprocessor
 from spell_checker import SpellChecker
 from pdf_annotator import PDFAnnotator
-from pdf_highlighter import PDFHighlighter
+try:
+    from pdf_highlighter_fitz import PDFHighlighterFitz as PDFHighlighter
+    FITZ_AVAILABLE = True
+except ImportError:
+    from pdf_highlighter import PDFHighlighter
+    FITZ_AVAILABLE = False
+    print("경고: PyMuPDF가 없습니다. pdfplumber 버전 사용")
 
 
 class GrammarCheckProcessor:
