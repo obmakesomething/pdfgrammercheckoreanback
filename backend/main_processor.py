@@ -47,11 +47,12 @@ class GrammarCheckProcessor:
         print("=" * 70)
 
         try:
-            # 1단계: PDF 텍스트 추출
-            print("\n[1/5] PDF 텍스트 추출 중...")
+            # 1단계: PDF 텍스트 추출 (파라그래프 단위)
+            print("\n[1/5] PDF 텍스트 추출 중 (파라그래프 단위)...")
             extractor = SimplePDFExtractor(input_pdf_path)
-            text_with_positions, raw_text = extractor.extract_text_with_positions()
+            paragraphs, text_with_positions, raw_text = extractor.extract_paragraphs_with_positions()
             print(f"  ✓ 총 {len(text_with_positions)}자 추출 완료")
+            print(f"  ✓ 파라그래프 개수: {len(paragraphs)}개")
             print(f"  ✓ 텍스트 미리보기: {raw_text[:100]}...")
 
             # 2단계: 텍스트 전처리 (앵커 매핑)
@@ -61,10 +62,9 @@ class GrammarCheckProcessor:
             print(f"  ✓ 전처리 완료: {len(cleaned_text)}자")
             print(f"  ✓ 앵커 맵 크기: {len(anchor_map)}개")
 
-            # 3단계: 맞춤법 검사
-            print("\n[3/5] 맞춤법 검사 중...")
-            print("  (300자씩 분할하여 검사합니다)")
-            errors = self.spell_checker.check(cleaned_text, max_length=300)
+            # 3단계: 맞춤법 검사 (파라그래프 단위)
+            print("\n[3/5] 맞춤법 검사 중 (파라그래프 단위)...")
+            errors = self.spell_checker.check_paragraphs(paragraphs)
             print(f"  ✓ 검사 완료: {len(errors)}개 오류 발견")
 
             if len(errors) == 0:

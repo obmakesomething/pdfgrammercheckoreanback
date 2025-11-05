@@ -16,7 +16,7 @@ class SpellChecker:
 
     def check(self, text: str, max_length: int = 500) -> List[Dict]:
         """
-        맞춤법 검사 실행
+        맞춤법 검사 실행 (단일 텍스트)
 
         Args:
             text: 검사할 텍스트
@@ -39,15 +39,48 @@ class SpellChecker:
         # 바른 API는 긴 텍스트도 처리할 수 있으므로 max_length 무시
         all_errors = self.checker.check(text)
 
-        # 띄어쓰기 제안(SPACING) 필터링 - 실제 맞춤법/문법 오류만 반환
-        filtered_errors = [
-            error for error in all_errors
-            if error.get('category', '') != 'SPACING'
-        ]
+        print(f"  발견된 제안: {len(all_errors)}개 (띄어쓰기, 맞춤법, 문법 포함)")
 
-        print(f"  전체 제안: {len(all_errors)}개 → 필터링 후: {len(filtered_errors)}개 (띄어쓰기 제외)")
+        return all_errors
 
-        return filtered_errors
+    def check_paragraphs(self, paragraphs: List[Dict]) -> List[Dict]:
+        """
+        파라그래프 단위로 맞춤법 검사 실행
+
+        Args:
+            paragraphs: 파라그래프 정보 리스트
+                [
+                    {
+                        'text': '파라그래프 텍스트',
+                        'start_index': 시작 인덱스,
+                        'end_index': 끝 인덱스
+                    },
+                    ...
+                ]
+
+        Returns:
+            list: 전체 오류 목록 (위치 정보는 원본 텍스트 기준)
+        """
+        all_errors = []
+        print(f"  파라그래프 {len(paragraphs)}개 검사 시작...")
+
+        for i, para in enumerate(paragraphs, 1):
+            para_text = para['text']
+            if not para_text.strip():
+                continue
+
+            # 개별 파라그래프 검사
+            para_errors = self.checker.check(para_text)
+
+            # 위치 정보를 원본 텍스트 기준으로 변환
+            for error in para_errors:
+                error['position'] = para['start_index'] + error.get('position', 0)
+                all_errors.append(error)
+
+            print(f"  [{i}/{len(paragraphs)}] {len(para_errors)}개 오류 발견 (길이: {len(para_text)}자)")
+
+        print(f"  총 {len(all_errors)}개 오류 발견")
+        return all_errors
 
 
 # 테스트

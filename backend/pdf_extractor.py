@@ -122,6 +122,77 @@ class SimplePDFExtractor:
     def __init__(self, pdf_path):
         self.pdf_path = pdf_path
 
+    def extract_paragraphs_with_positions(self):
+        """
+        파라그래프 단위로 텍스트와 위치 정보 추출
+
+        Returns:
+            list: 파라그래프 정보 리스트
+                [
+                    {
+                        'text': '파라그래프 텍스트',
+                        'start_index': 시작 인덱스,
+                        'end_index': 끝 인덱스,
+                        'page': 시작 페이지
+                    },
+                    ...
+                ]
+        """
+        # 먼저 문자 단위로 추출
+        text_with_positions, raw_text = self.extract_text_with_positions()
+
+        # 파라그래프 분리 (줄바꿈 2개 이상 또는 마침표+줄바꿈으로 구분)
+        paragraphs = []
+        current_para = []
+        current_start = 0
+
+        for i, char in enumerate(raw_text):
+            current_para.append(char)
+
+            # 파라그래프 구분 조건:
+            # 1. 연속된 줄바꿈 2개 이상
+            # 2. 300자 이상 && 마침표나 물음표, 느낌표 뒤 줄바꿈
+            if i > 0:
+                # 줄바꿈 2개 이상
+                if char == '\n' and i > 0 and raw_text[i-1] == '\n':
+                    para_text = ''.join(current_para).strip()
+                    if para_text:
+                        paragraphs.append({
+                            'text': para_text,
+                            'start_index': current_start,
+                            'end_index': i,
+                            'page': text_with_positions[current_start]['page'] if current_start < len(text_with_positions) else 1
+                        })
+                        current_para = []
+                        current_start = i + 1
+
+                # 300자 이상이고 문장 종결 후 줄바꿈
+                elif len(current_para) >= 300 and char == '\n':
+                    if i > 0 and raw_text[i-1] in '.?!':
+                        para_text = ''.join(current_para).strip()
+                        if para_text:
+                            paragraphs.append({
+                                'text': para_text,
+                                'start_index': current_start,
+                                'end_index': i,
+                                'page': text_with_positions[current_start]['page'] if current_start < len(text_with_positions) else 1
+                            })
+                            current_para = []
+                            current_start = i + 1
+
+        # 마지막 파라그래프
+        if current_para:
+            para_text = ''.join(current_para).strip()
+            if para_text:
+                paragraphs.append({
+                    'text': para_text,
+                    'start_index': current_start,
+                    'end_index': len(raw_text),
+                    'page': text_with_positions[current_start]['page'] if current_start < len(text_with_positions) else 1
+                })
+
+        return paragraphs, text_with_positions, raw_text
+
     def extract_text_with_positions(self):
         """
         문자 단위로 텍스트와 정확한 위치 정보 추출 (pdfplumber 사용)
