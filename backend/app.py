@@ -140,12 +140,15 @@ def check_pdf():
                 base_name = os.path.splitext(pdf_file.filename)[0]
                 download_name = f"{base_name}_맞춤법검사.pdf"
 
-                return send_file(
+                response = send_file(
                     pdf_to_send,
                     mimetype='application/pdf',
                     as_attachment=True,
                     download_name=download_name
                 )
+                # 오류 개수를 헤더에 추가
+                response.headers['X-Errors-Found'] = str(result['errors_found'])
+                return response
             else:
                 return jsonify({
                     'status': 'error',
