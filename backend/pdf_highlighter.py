@@ -39,8 +39,10 @@ class PDFHighlighter:
             # 2. PyPDF2로 주석 추가
             self._add_annotations_to_pdf(annotations_by_page)
 
+            total_annotations = sum(len(anns) for anns in annotations_by_page.values())
             print(f"✓ PDF 하이라이트 완료: {self.output_pdf_path}")
-            print(f"  총 {sum(len(anns) for anns in annotations_by_page.values())}개의 하이라이트 추가")
+            print(f"  총 {total_annotations}개의 하이라이트 추가")
+            print(f"  입력 오류: {len(errors)}개, 실제 하이라이트: {total_annotations}개")
 
         except Exception as e:
             print(f"PDF 하이라이트 오류: {e}")
@@ -54,6 +56,7 @@ class PDFHighlighter:
             {page_num: [annotation_dict, ...], ...}
         """
         annotations_by_page = {}
+        used_positions = set()  # 이미 사용한 위치 추적 (중복 방지)
 
         with pdfplumber.open(self.input_pdf_path) as pdf:
             for page_num, page in enumerate(pdf.pages):
@@ -66,13 +69,19 @@ class PDFHighlighter:
                 # 각 오류에 대해 해당 페이지에서 단어 찾기
                 for error in errors:
                     wrong_word = error['wrong'].strip()
+                    found = False
 
-                    # 페이지에서 일치하는 단어 찾기
+                    # 페이지에서 정확히 일치하는 단어 찾기
                     for word_obj in words:
-                        word_text = word_obj['text']
+                        word_text = word_obj['text'].strip()
+                        word_key = (page_num, word_obj['x0'], word_obj['top'])
 
-                        # 단어가 일치하면 (대소문자 구분 없이)
-                        if wrong_word in word_text or word_text in wrong_word:
+                        # 이미 사용한 위치는 건너뛰기
+                        if word_key in used_positions:
+                            continue
+
+                        # 정확히 일치하거나, wrong_word가 word_text와 같은 경우
+                        if word_text == wrong_word or wrong_word == word_text:
                             # PDF 좌표계로 변환 (pdfplumber는 상단이 0, PDF는 하단이 0)
                             x0 = float(word_obj['x0'])
                             y0 = page_height - float(word_obj['bottom'])  # PDF 좌표계
@@ -86,7 +95,35 @@ class PDFHighlighter:
                                 'bbox': [x0, y0, x1, y1]
                             }
                             page_annotations.append(annotation)
-                            break  # 첫 번째 일치만 사용 (중복 방지)
+                            used_positions.add(word_key)
+                            found = True
+                            break
+
+                    # 정확히 일치하는 게 없으면, 포함하는 단어 찾기 (fallback)
+                    if not found:
+                        for word_obj in words:
+                            word_text = word_obj['text'].strip()
+                            word_key = (page_num, word_obj['x0'], word_obj['top'])
+
+                            if word_key in used_positions:
+                                continue
+
+                            # wrong_word가 word_text에 포함되어 있으면
+                            if wrong_word in word_text and len(wrong_word) >= 2:
+                                x0 = float(word_obj['x0'])
+                                y0 = page_height - float(word_obj['bottom'])
+                                x1 = float(word_obj['x1'])
+                                y1 = page_height - float(word_obj['top'])
+
+                                annotation = {
+                                    'wrong': error['wrong'],
+                                    'correct': error['correct'],
+                                    'help': error.get('help', ''),
+                                    'bbox': [x0, y0, x1, y1]
+                                }
+                                page_annotations.append(annotation)
+                                used_positions.add(word_key)
+                                break
 
                 if page_annotations:
                     annotations_by_page[page_num] = page_annotations
