@@ -75,12 +75,12 @@ class PDFHighlighterFitz:
 
                         # 텍스트의 실제 바운딩 박스를 구하기 위해 글자별 위치 확인
                         # inst는 Rect(x0, y0, x1, y1) 형태
-                        # 약간의 패딩을 줄여서 텍스트에 딱 맞게 조정
+                        # 패딩을 크게 줄여서 텍스트에 딱 맞게 조정
                         adjusted_rect = fitz.Rect(
                             inst.x0,
-                            inst.y0 + 1,  # 상단 패딩 줄이기
+                            inst.y0 + 3,  # 상단 패딩 많이 줄이기
                             inst.x1,
-                            inst.y1 - 1   # 하단 패딩 줄이기
+                            inst.y1 - 3   # 하단 패딩 많이 줄이기
                         )
 
                         # 하이라이트 추가 (조정된 사각형 사용)
