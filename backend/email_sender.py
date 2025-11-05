@@ -25,11 +25,14 @@ class EmailSender:
 
     def __init__(self):
         if RESEND_AVAILABLE:
-            resend.api_key = os.getenv('RESEND_API_KEY')
+            api_key = os.getenv('RESEND_API_KEY')
+            print(f"DEBUG: RESEND_API_KEY = {api_key[:10] if api_key else 'None'}...")
+            resend.api_key = api_key
         self.from_email = os.getenv(
             'RESEND_FROM_EMAIL',
             'noreply@pdfgrammercheckorean.site'
         )
+        print(f"DEBUG: FROM_EMAIL = {self.from_email}")
 
     def send_grammar_check_result(
         self,
