@@ -115,17 +115,65 @@ class PDFTextExtractor:
             raise
 
 
-# 더 나은 방식: PyPDF2를 사용한 간단한 추출
+# 더 나은 방식: pdfplumber를 사용한 정확한 좌표 추출
 class SimplePDFExtractor:
-    """PyPDF2를 사용한 간단한 PDF 텍스트 추출"""
+    """pdfplumber를 사용한 정확한 PDF 텍스트 및 좌표 추출"""
 
     def __init__(self, pdf_path):
         self.pdf_path = pdf_path
 
     def extract_text_with_positions(self):
         """
-        문자 단위로 텍스트와 페이지 정보 추출
-        (x, y 좌표는 PyPDF2로는 어려우므로 페이지 번호만)
+        문자 단위로 텍스트와 정확한 위치 정보 추출 (pdfplumber 사용)
+
+        Returns:
+            tuple: (text_with_positions, raw_text)
+        """
+        try:
+            import pdfplumber
+        except ImportError:
+            print("경고: pdfplumber가 설치되지 않아 PyPDF2를 사용합니다 (좌표 정보 없음)")
+            return self._extract_with_pypdf2()
+
+        text_with_positions = []
+        raw_text_parts = []
+        char_index = 0
+
+        try:
+            with pdfplumber.open(self.pdf_path) as pdf:
+                for page_num, page in enumerate(pdf.pages):
+                    # 문자 단위로 추출 (chars에 각 문자의 좌표 정보 포함)
+                    chars = page.chars
+
+                    for char_obj in chars:
+                        char = char_obj['text']
+
+                        # pdfplumber 좌표계: 왼쪽 상단이 (0,0)
+                        # PDF 좌표계: 왼쪽 하단이 (0,0)이므로 변환 필요
+                        page_height = float(page.height)
+
+                        char_info = {
+                            'char': char,
+                            'page': page_num + 1,
+                            'x': float(char_obj['x0']),  # 문자 왼쪽 x 좌표
+                            'y': page_height - float(char_obj['top']),  # PDF 좌표계로 변환
+                            'index': char_index
+                        }
+
+                        text_with_positions.append(char_info)
+                        raw_text_parts.append(char)
+                        char_index += 1
+
+            raw_text = ''.join(raw_text_parts)
+            return text_with_positions, raw_text
+
+        except Exception as e:
+            print(f"pdfplumber 추출 오류: {e}, PyPDF2로 대체합니다")
+            return self._extract_with_pypdf2()
+
+    def _extract_with_pypdf2(self):
+        """
+        PyPDF2를 사용한 fallback 방식 (좌표 정보 없음)
         """
         import PyPDF2
 
