@@ -73,8 +73,18 @@ class PDFHighlighterFitz:
                     if text_instances:
                         inst = text_instances[0]
 
-                        # 하이라이트 추가 (텍스트 라인에 맞게)
-                        highlight = page.add_highlight_annot(inst)
+                        # 텍스트의 실제 바운딩 박스를 구하기 위해 글자별 위치 확인
+                        # inst는 Rect(x0, y0, x1, y1) 형태
+                        # 약간의 패딩을 줄여서 텍스트에 딱 맞게 조정
+                        adjusted_rect = fitz.Rect(
+                            inst.x0,
+                            inst.y0 + 1,  # 상단 패딩 줄이기
+                            inst.x1,
+                            inst.y1 - 1   # 하단 패딩 줄이기
+                        )
+
+                        # 하이라이트 추가 (조정된 사각형 사용)
+                        highlight = page.add_highlight_annot(adjusted_rect)
                         highlight.set_colors(stroke=color)
 
                         # 주석 내용 추가
