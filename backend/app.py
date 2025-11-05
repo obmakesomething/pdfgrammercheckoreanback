@@ -148,6 +148,9 @@ def check_pdf():
                 )
                 # 오류 개수를 헤더에 추가
                 response.headers['X-Errors-Found'] = str(result['errors_found'])
+                # CORS 헤더 명시적으로 추가
+                response.headers['Access-Control-Allow-Origin'] = '*'
+                response.headers['Access-Control-Expose-Headers'] = 'X-Errors-Found'
                 return response
             else:
                 return jsonify({
