@@ -8,6 +8,8 @@ import SEOContent from '@/components/SEOContent'
 export default function Home() {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [email, setEmail] = useState('')
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false)
   const [showAd, setShowAd] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
@@ -24,6 +26,16 @@ export default function Home() {
       return
     }
 
+    if (!agreedToTerms) {
+      setMessage({ type: 'error', text: '이용약관에 동의해주세요.' })
+      return
+    }
+
+    if (!agreedToPrivacy) {
+      setMessage({ type: 'error', text: '개인정보 처리방침에 동의해주세요.' })
+      return
+    }
+
     // Show ad
     setMessage(null)
     setShowAd(true)
@@ -37,40 +49,59 @@ export default function Home() {
   const handleAdComplete = async () => {
     setShowAd(false)
     setIsProcessing(true)
-    setMessage({ type: 'success', text: '광고 시청이 완료되었습니다. 검사를 시작합니다...' })
 
     try {
+      // 단계 1: 업로드 시작
+      setMessage({ type: 'success', text: '📤 파일 업로드 중...' })
+
       const formData = new FormData()
       formData.append('pdf', pdfFile!)
       formData.append('email', email)
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.pdfgrammercheckorean.site'
+
+      // 단계 2: 서버 전송
+      setMessage({ type: 'success', text: '⏳ PDF 맞춤법 검사 중...' })
+
       const response = await fetch(`${apiUrl}/api/check-pdf`, {
         method: 'POST',
         body: formData,
       })
 
-      const data = await response.json()
-
       if (response.ok) {
+        // PDF 파일 다운로드
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${pdfFile!.name.replace('.pdf', '')}_맞춤법검사.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+
         setMessage({
           type: 'success',
-          text: `검사 요청이 완료되었습니다! 발견된 오류: ${data.errors_found}개\n5분 이내 이메일로 결과를 발송해드립니다.`
+          text: '✅ 맞춤법 검사 완료!\n\nPDF 파일이 다운로드되었습니다.\n빨간색 주석을 클릭하면 수정 제안을 확인할 수 있습니다.'
         })
+
         // Reset form
         setPdfFile(null)
         setEmail('')
+        setAgreedToTerms(false)
+        setAgreedToPrivacy(false)
       } else {
+        const data = await response.json()
         setMessage({
           type: 'error',
-          text: data.message || '오류가 발생했습니다. 다시 시도해주세요.'
+          text: `❌ ${data.message || '오류가 발생했습니다. 다시 시도해주세요.'}`
         })
       }
     } catch (error) {
       console.error('Error:', error)
       setMessage({
         type: 'error',
-        text: '서버 연결에 실패했습니다. 잠시 후 다시 시도해주세요.'
+        text: '❌ 서버 연결에 실패했습니다.\n네트워크 상태를 확인한 후 다시 시도해주세요.'
       })
     } finally {
       setIsProcessing(false)
@@ -106,6 +137,10 @@ export default function Home() {
               setPdfFile={setPdfFile}
               email={email}
               setEmail={setEmail}
+              agreedToTerms={agreedToTerms}
+              setAgreedToTerms={setAgreedToTerms}
+              agreedToPrivacy={agreedToPrivacy}
+              setAgreedToPrivacy={setAgreedToPrivacy}
               onSubmit={handleSubmit}
               isProcessing={isProcessing}
             />

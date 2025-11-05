@@ -4,11 +4,13 @@
 Flask API 서버
 PDF 맞춤법 검사 API 제공
 """
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import os
 import tempfile
 import uuid
+import csv
+import datetime
 from main_processor import GrammarCheckProcessor
 from email_sender import EmailSender
 from dotenv import load_dotenv
@@ -109,42 +111,56 @@ def check_pdf():
         # 3. 맞춤법 검사 실행
         result = processor.process(input_pdf_path, output_pdf_path)
 
-        # 4. 이메일 발송
-        email_sent = False
-        if result['success'] and result['errors_found'] > 0:
-            email_sent = email_sender.send_grammar_check_result(
-                to_email=email,
-                pdf_path=output_pdf_path,
-                errors_count=result['errors_found'],
-                original_filename=pdf_file.filename
-            )
-        elif result['success'] and result['errors_found'] == 0:
-            # 오류가 없는 경우 알림 이메일
-            email_sent = email_sender.send_grammar_check_result(
-                to_email=email,
-                pdf_path=input_pdf_path,  # 원본 파일 전송
-                errors_count=0,
-                original_filename=pdf_file.filename
-            )
-
-        # 5. 임시 파일 삭제
+        # 4. 이메일을 CSV에 저장
         try:
-            if os.path.exists(input_pdf_path):
-                os.remove(input_pdf_path)
-            if os.path.exists(output_pdf_path):
-                os.remove(output_pdf_path)
-            print("임시 파일 삭제 완료")
-        except Exception as e:
-            print(f"임시 파일 삭제 실패: {e}")
+            csv_file = 'user_emails.csv'
+            file_exists = os.path.exists(csv_file)
 
-        # 6. 응답 반환
+            with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=['timestamp', 'email', 'filename', 'errors_found'])
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow({
+                    'timestamp': datetime.datetime.now().isoformat(),
+                    'email': email,
+                    'filename': pdf_file.filename,
+                    'errors_found': result['errors_found']
+                })
+            print(f"이메일 저장 완료: {email}")
+        except Exception as e:
+            print(f"이메일 저장 실패: {e}")
+
+        # 5. PDF 파일 반환 (다운로드)
         if result['success']:
-            return jsonify({
-                'status': 'success',
-                'message': '이메일이 발송되었습니다',
-                'errors_found': result['errors_found']
-            }), 200
+            # 오류가 있으면 수정된 PDF, 없으면 원본 PDF
+            pdf_to_send = output_pdf_path if result['errors_found'] > 0 else input_pdf_path
+
+            if os.path.exists(pdf_to_send):
+                # 파일 이름 생성
+                base_name = os.path.splitext(pdf_file.filename)[0]
+                download_name = f"{base_name}_맞춤법검사.pdf"
+
+                return send_file(
+                    pdf_to_send,
+                    mimetype='application/pdf',
+                    as_attachment=True,
+                    download_name=download_name
+                )
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'PDF 파일 생성에 실패했습니다'
+                }), 500
         else:
+            # 임시 파일 삭제
+            try:
+                if os.path.exists(input_pdf_path):
+                    os.remove(input_pdf_path)
+                if os.path.exists(output_pdf_path):
+                    os.remove(output_pdf_path)
+            except Exception as e:
+                print(f"임시 파일 삭제 실패: {e}")
+
             return jsonify({
                 'status': 'error',
                 'message': result['message']

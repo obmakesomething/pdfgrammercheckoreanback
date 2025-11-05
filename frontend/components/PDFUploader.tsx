@@ -7,6 +7,10 @@ interface PDFUploaderProps {
   setPdfFile: (file: File | null) => void
   email: string
   setEmail: (email: string) => void
+  agreedToTerms: boolean
+  setAgreedToTerms: (agreed: boolean) => void
+  agreedToPrivacy: boolean
+  setAgreedToPrivacy: (agreed: boolean) => void
   onSubmit: () => void
   isProcessing: boolean
 }
@@ -16,6 +20,10 @@ export default function PDFUploader({
   setPdfFile,
   email,
   setEmail,
+  agreedToTerms,
+  setAgreedToTerms,
+  agreedToPrivacy,
+  setAgreedToPrivacy,
   onSubmit,
   isProcessing
 }: PDFUploaderProps) {
@@ -132,16 +140,65 @@ export default function PDFUploader({
           disabled={isProcessing}
         />
         <p className="text-xs text-gray-500 mt-2">
-          검사 완료된 PDF 파일을 이메일로 받으실 수 있습니다
+          검사 완료 후 수정된 PDF 파일을 다운로드하실 수 있습니다
         </p>
+      </div>
+
+      {/* Terms and Privacy Agreement */}
+      <div className="space-y-3 border-t pt-4">
+        <div className="flex items-start">
+          <input
+            type="checkbox"
+            id="terms"
+            checked={agreedToTerms}
+            onChange={(e) => setAgreedToTerms(e.target.checked)}
+            className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+            disabled={isProcessing}
+          />
+          <label htmlFor="terms" className="ml-3 text-sm text-gray-700 cursor-pointer">
+            <span className="font-medium">(필수)</span>{' '}
+            <a
+              href="/terms.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline"
+            >
+              이용약관
+            </a>
+            에 동의합니다
+          </label>
+        </div>
+
+        <div className="flex items-start">
+          <input
+            type="checkbox"
+            id="privacy"
+            checked={agreedToPrivacy}
+            onChange={(e) => setAgreedToPrivacy(e.target.checked)}
+            className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+            disabled={isProcessing}
+          />
+          <label htmlFor="privacy" className="ml-3 text-sm text-gray-700 cursor-pointer">
+            <span className="font-medium">(필수)</span>{' '}
+            <a
+              href="/privacy.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline"
+            >
+              개인정보 처리방침
+            </a>
+            에 동의하며, 이메일 주소 수집 및 서비스 제공 목적으로의 사용에 동의합니다
+          </label>
+        </div>
       </div>
 
       {/* Submit Button */}
       <button
         onClick={onSubmit}
-        disabled={isProcessing || !pdfFile || !email}
+        disabled={isProcessing || !pdfFile || !email || !agreedToTerms || !agreedToPrivacy}
         className={`w-full py-4 px-6 rounded-lg font-semibold text-white text-lg transition-all ${
-          isProcessing || !pdfFile || !email
+          isProcessing || !pdfFile || !email || !agreedToTerms || !agreedToPrivacy
             ? 'bg-gray-400 cursor-not-allowed'
             : 'bg-blue-600 hover:bg-blue-700 active:scale-95'
         }`}
