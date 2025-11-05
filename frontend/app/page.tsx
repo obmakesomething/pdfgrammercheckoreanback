@@ -12,6 +12,8 @@ export default function Home() {
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false)
   const [showAd, setShowAd] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [progressMessage, setProgressMessage] = useState('')
+  const [errorsFound, setErrorsFound] = useState<number | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
   const handleSubmit = () => {
@@ -49,10 +51,12 @@ export default function Home() {
   const handleAdComplete = async () => {
     setShowAd(false)
     setIsProcessing(true)
+    setMessage(null)
+    setErrorsFound(null)
 
     try {
       // 단계 1: 업로드 시작
-      setMessage({ type: 'success', text: '📤 파일 업로드 중...' })
+      setProgressMessage('📤 파일 업로드 중...')
 
       const formData = new FormData()
       formData.append('pdf', pdfFile!)
@@ -61,14 +65,19 @@ export default function Home() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.pdfgrammercheckorean.site'
 
       // 단계 2: 서버 전송
-      setMessage({ type: 'success', text: '⏳ PDF 맞춤법 검사 중...' })
+      setProgressMessage('⏳ PDF 맞춤법 검사 중...')
 
       const response = await fetch(`${apiUrl}/api/check-pdf`, {
         method: 'POST',
         body: formData,
       })
 
+      setProgressMessage('') // 팝업 닫기
+
       if (response.ok) {
+        // 헤더에서 오류 개수 추출
+        const errorsCount = parseInt(response.headers.get('X-Errors-Found') || '0')
+
         // PDF 파일 다운로드
         const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
@@ -80,9 +89,14 @@ export default function Home() {
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
 
+        // 오류 개수에 따라 메시지 변경
+        const errorMessage = errorsCount === 0
+          ? '✅ 맞춤법 오류가 발견되지 않았습니다!'
+          : `✅ ${errorsCount}개의 맞춤법 오류를 발견했습니다!`
+
         setMessage({
           type: 'success',
-          text: '✅ 맞춤법 검사 완료!\n\nPDF 파일이 다운로드되었습니다.\n빨간색 주석을 클릭하면 수정 제안을 확인할 수 있습니다.'
+          text: `${errorMessage}\n\nPDF 파일이 다운로드되었습니다.\n빨간색 주석을 클릭하면 수정 제안을 확인할 수 있습니다.`
         })
 
         // Reset form
@@ -99,6 +113,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error:', error)
+      setProgressMessage('')
       setMessage({
         type: 'error',
         text: '❌ 서버 연결에 실패했습니다.\n네트워크 상태를 확인한 후 다시 시도해주세요.'
@@ -125,7 +140,7 @@ export default function Home() {
             PDF 한국어 맞춤법 검사기
           </h1>
           <p className="text-xl text-gray-600">
-            PDF 파일의 맞춤법을 검사하고 빨간색으로 표시하여 이메일로 전송해드립니다
+            PDF 파일의 맞춤법을 검사하고 빨간색 주석으로 표시하여 다운로드해드립니다
           </p>
         </div>
 
@@ -171,6 +186,19 @@ export default function Home() {
         {/* SEO Content */}
         <SEOContent />
       </div>
+
+      {/* Progress Popup */}
+      {progressMessage && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <div className="text-center space-y-4">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
+              <p className="text-xl font-semibold text-gray-900">{progressMessage}</p>
+              <p className="text-sm text-gray-600">잠시만 기다려주세요...</p>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

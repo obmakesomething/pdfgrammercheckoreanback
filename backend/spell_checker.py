@@ -23,7 +23,7 @@ class SpellChecker:
             max_length: 한 번에 검사할 최대 길이 (바른 API는 긴 문장도 처리 가능)
 
         Returns:
-            list: 오류 목록
+            list: 오류 목록 (띄어쓰기 제안 제외, 실제 맞춤법/문법 오류만)
                 [
                     {
                         'wrong': '틀린 단어',
@@ -37,7 +37,17 @@ class SpellChecker:
                 ]
         """
         # 바른 API는 긴 텍스트도 처리할 수 있으므로 max_length 무시
-        return self.checker.check(text)
+        all_errors = self.checker.check(text)
+
+        # 띄어쓰기 제안(SPACING) 필터링 - 실제 맞춤법/문법 오류만 반환
+        filtered_errors = [
+            error for error in all_errors
+            if error.get('category', '') != 'SPACING'
+        ]
+
+        print(f"  전체 제안: {len(all_errors)}개 → 필터링 후: {len(filtered_errors)}개 (띄어쓰기 제외)")
+
+        return filtered_errors
 
 
 # 테스트
