@@ -76,12 +76,43 @@ class PDFHighlighterFitz:
                         # 텍스트의 실제 바운딩 박스를 구하기 위해 글자별 위치 확인
                         # inst는 Rect(x0, y0, x1, y1) 형태
                         # 패딩을 크게 줄여서 텍스트에 딱 맞게 조정
-                        adjusted_rect = fitz.Rect(
-                            inst.x0,
-                            inst.y0 + 3,  # 상단 패딩 많이 줄이기
-                            inst.x1,
-                            inst.y1 - 3   # 하단 패딩 많이 줄이기
-                        )
+                        padding = 3
+
+                        # 패딩 적용 후 유효성 검증
+                        y0_adjusted = inst.y0 + padding
+                        y1_adjusted = inst.y1 - padding
+
+                        # 사각형이 너무 작아지는 것 방지 (최소 높이 1픽셀)
+                        if y1_adjusted <= y0_adjusted:
+                            # 패딩 없이 원본 사용
+                            y0_adjusted = inst.y0
+                            y1_adjusted = inst.y1
+
+                        # 좌표 유효성 검증 (NaN, 무한대 체크)
+                        try:
+                            adjusted_rect = fitz.Rect(
+                                inst.x0,
+                                y0_adjusted,
+                                inst.x1,
+                                y1_adjusted
+                            )
+
+                            # 페이지 경계 내에 있는지 확인
+                            page_rect = page.rect
+                            if not (adjusted_rect.x0 >= 0 and adjusted_rect.x1 <= page_rect.width and
+                                    adjusted_rect.y0 >= 0 and adjusted_rect.y1 <= page_rect.height and
+                                    adjusted_rect.is_valid):
+                                # 페이지 경계 내로 클리핑
+                                adjusted_rect = adjusted_rect & page_rect
+
+                            # 여전히 유효하지 않으면 건너뛰기
+                            if not adjusted_rect.is_valid or adjusted_rect.is_empty:
+                                print(f"  경고: '{wrong_word}' 하이라이트 건너뜀 (유효하지 않은 좌표)")
+                                continue
+
+                        except (ValueError, RuntimeError) as e:
+                            print(f"  경고: '{wrong_word}' 하이라이트 건너뜀 (좌표 오류: {e})")
+                            continue
 
                         # 하이라이트 추가 (조정된 사각형 사용)
                         highlight = page.add_highlight_annot(adjusted_rect)
