@@ -29,8 +29,11 @@ class TextPreprocessor:
         Returns:
             tuple: (cleaned_text, anchor_map)
         """
+        # 0단계: PDF 노이즈 제거 (NEW)
+        text, mapping = self._clean_pdf_noise(self.raw_text)
+
         # 1단계: 하이픈 + 줄바꿈 병합
-        text, mapping = self._merge_hyphen_newlines(self.raw_text)
+        text, mapping = self._merge_hyphen_newlines(text, mapping)
 
         # 2단계: 단순 줄바꿈으로 분리된 단어 병합
         text, mapping = self._merge_word_breaks(text, mapping)
@@ -41,15 +44,20 @@ class TextPreprocessor:
         # 4단계: 문장 종결 후 줄바꿈을 공백으로
         text, mapping = self._normalize_sentence_breaks(text, mapping)
 
+        # 5단계: 연속된 공백 정리 (NEW)
+        text, mapping = self._normalize_spaces(text, mapping)
+
         self.cleaned_text = text
         self.anchor_map = mapping
 
         return self.cleaned_text, self.anchor_map
 
-    def _merge_hyphen_newlines(self, text):
+    def _clean_pdf_noise(self, text):
         """
-        패턴 A: 하이픈 + 줄바꿈 병합
-        예: "안녕하세-\n요" -> "안녕하세요"
+        0단계: PDF에서 자주 발생하는 노이즈 제거
+        - 불필요한 제어 문자 제거
+        - 이상한 유니코드 문자 정리
+        - 페이지 번호 패턴 제거
         """
         result = []
         mapping = {}
@@ -57,20 +65,58 @@ class TextPreprocessor:
         i = 0
 
         while i < len(text):
+            char = text[i]
+
+            # 제어 문자 제거 (줄바꿈, 탭, 캐리지리턴은 유지)
+            if ord(char) < 32 and char not in ['\n', '\t', '\r']:
+                i += 1
+                continue
+
+            # NULL 바이트 제거
+            if char == '\x00':
+                i += 1
+                continue
+
+            # PDF에서 자주 나타나는 특수 마커 제거 (예: \uf0b7 = bullet point)
+            if '\uf000' <= char <= '\uf0ff':
+                # 불릿 포인트는 공백으로 대체
+                result.append(' ')
+                mapping[cleaned_idx] = [i]
+                cleaned_idx += 1
+                i += 1
+                continue
+
+            # 정상 문자는 유지
+            result.append(char)
+            mapping[cleaned_idx] = [i]
+            cleaned_idx += 1
+            i += 1
+
+        return ''.join(result), mapping
+
+    def _merge_hyphen_newlines(self, text, mapping):
+        """
+        패턴 A: 하이픈 + 줄바꿈 병합
+        예: "안녕하세-\n요" -> "안녕하세요"
+        """
+        result = []
+        new_mapping = {}
+        cleaned_idx = 0
+        i = 0
+
+        while i < len(text):
             # 하이픈 + 줄바꿈 패턴 감지
-            if i + 2 < len(text) and text[i] == '-' and text[i + 1] == '\n':
+            if i + 1 < len(text) and text[i] == '-' and text[i + 1] == '\n':
                 # 하이픈과 줄바꿈 제거, 연결
-                # 현재 문자 이전까지는 그대로
-                # 하이픈과 줄바꿈은 건너뛰기
                 i += 2  # '-'와 '\n' 건너뛰기
                 continue
             else:
                 result.append(text[i])
-                mapping[cleaned_idx] = [i]
+                new_mapping[cleaned_idx] = mapping.get(i, [i])
                 cleaned_idx += 1
                 i += 1
 
-        return ''.join(result), mapping
+        return ''.join(result), new_mapping
 
     def _merge_word_breaks(self, text, mapping):
         """
@@ -197,6 +243,38 @@ class TextPreprocessor:
     def _is_korean(self, char):
         """한글인지 확인"""
         return '가' <= char <= '힣' or 'ㄱ' <= char <= 'ㅎ' or 'ㅏ' <= char <= 'ㅣ'
+
+    def _normalize_spaces(self, text, mapping):
+        """
+        패턴 E: 연속된 공백을 하나로 정리
+        예: "안녕   하세요" -> "안녕 하세요"
+        """
+        result = []
+        new_mapping = {}
+        cleaned_idx = 0
+        i = 0
+
+        while i < len(text):
+            char = text[i]
+
+            # 공백이 연속되는 경우
+            if char == ' ':
+                # 첫 공백은 추가
+                result.append(char)
+                new_mapping[cleaned_idx] = mapping.get(i, [i])
+                cleaned_idx += 1
+                i += 1
+
+                # 연속된 공백은 건너뛰기
+                while i < len(text) and text[i] == ' ':
+                    i += 1
+            else:
+                result.append(char)
+                new_mapping[cleaned_idx] = mapping.get(i, [i])
+                cleaned_idx += 1
+                i += 1
+
+        return ''.join(result), new_mapping
 
     def _is_sentence_end(self, text, pos):
         """문장 종결 위치인지 확인"""
