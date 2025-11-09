@@ -276,8 +276,47 @@
         }
 
 
+        .progress-container {
+            margin-top: 15px;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .progress-percentage {
+            font-size: 24px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
         .progress-steps {
-            margin-top: 10px;
             padding: 10px;
             background: #f8f9ff;
             border-radius: 5px;
@@ -519,27 +558,49 @@
 
             // 진행 상태 표시
             const progressHTML = `
-                <div class="spinner"></div>
-                <strong>PDF 맞춤법 검사 진행 중...</strong>
-                <div class="progress-steps">
-                    <div class="progress-step active">⏳ 1단계: PDF 텍스트 추출 중...</div>
-                    <div class="progress-step pending">⏸ 2단계: 텍스트 전처리 대기 중</div>
-                    <div class="progress-step pending">⏸ 3단계: 맞춤법 검사 대기 중</div>
-                    <div class="progress-step pending">⏸ 4단계: 오류 위치 분석 대기 중</div>
-                    <div class="progress-step pending">⏸ 5단계: PDF 하이라이트 생성 대기 중</div>
+                <div class="progress-container">
+                    <div class="progress-header">
+                        <strong>PDF 맞춤법 검사 진행 중...</strong>
+                        <span class="progress-percentage" id="progressPercentage">0%</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-steps">
+                        <div class="progress-step active" id="step1">⏳ 1단계: PDF 텍스트 추출 중...</div>
+                        <div class="progress-step pending" id="step2">⏸ 2단계: 텍스트 전처리 대기 중</div>
+                        <div class="progress-step pending" id="step3">⏸ 3단계: 맞춤법 검사 대기 중</div>
+                        <div class="progress-step pending" id="step4">⏸ 4단계: 오류 위치 분석 대기 중</div>
+                        <div class="progress-step pending" id="step5">⏸ 5단계: PDF 하이라이트 생성 대기 중</div>
+                    </div>
+                    <p style="margin-top: 10px; font-size: 13px; text-align: center;">처리 완료 후 자동으로 다운로드됩니다</p>
                 </div>
-                <p style="margin-top: 10px; font-size: 13px;">처리 완료 후 자동으로 다운로드됩니다</p>
             `;
             showStatus('loading', progressHTML);
 
-            // 진행 상태 업데이트 시뮬레이션
+            // 진행 상태 업데이트 시뮬레이션 (더 현실적으로)
+            let currentProgress = 0;
             let currentStep = 1;
+
             const progressInterval = setInterval(() => {
-                if (currentStep < 5) {
+                // 각 단계별 진행률 증가
+                if (currentStep === 1 && currentProgress < 20) {
+                    currentProgress += 2; // 0% → 20%
+                } else if (currentStep === 2 && currentProgress < 35) {
+                    currentProgress += 1.5; // 20% → 35%
+                } else if (currentStep === 3 && currentProgress < 60) {
+                    currentProgress += 2.5; // 35% → 60%
+                } else if (currentStep === 4 && currentProgress < 80) {
+                    currentProgress += 2; // 60% → 80%
+                } else if (currentStep === 5 && currentProgress < 95) {
+                    currentProgress += 1.5; // 80% → 95%
+                } else if (currentStep < 5) {
                     currentStep++;
-                    updateProgressSteps(currentStep);
+                    updateProgressSteps(currentStep, Math.floor(currentProgress));
                 }
-            }, 3000); // 3초마다 다음 단계로
+
+                updateProgressBar(Math.floor(currentProgress));
+            }, 500); // 0.5초마다 업데이트
 
             try {
                 const formData = new FormData();
@@ -558,6 +619,9 @@
                     const errorsFound = response.headers.get('X-Errors-Found') || '0';
                     const blob = await response.blob();
 
+                    // 완료 처리
+                    completeAllSteps();
+
                     // 파일 다운로드
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -567,8 +631,6 @@
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
-
-                    updateProgressSteps(5, true); // 모든 단계 완료
                     showStatus('success',
                         `✓ 검사가 완료되었습니다!<br>` +
                         `발견된 오류: ${errorsFound}개<br>` +
@@ -594,14 +656,25 @@
             }
         }
 
+        // 프로그레스 바 업데이트
+        function updateProgressBar(percentage) {
+            const progressBar = document.getElementById('progressBar');
+            const progressPercentage = document.getElementById('progressPercentage');
+
+            if (progressBar && progressPercentage) {
+                progressBar.style.width = `${percentage}%`;
+                progressPercentage.textContent = `${percentage}%`;
+            }
+        }
+
         // 진행 상태 업데이트
-        function updateProgressSteps(currentStep, allComplete = false) {
+        function updateProgressSteps(currentStep, percentage) {
             const steps = document.querySelectorAll('.progress-step');
 
             steps.forEach((step, index) => {
                 const stepNumber = index + 1;
 
-                if (allComplete || stepNumber < currentStep) {
+                if (stepNumber < currentStep) {
                     step.className = 'progress-step completed';
                     step.innerHTML = step.innerHTML.replace('⏳', '✓').replace('⏸', '✓');
                 } else if (stepNumber === currentStep) {
@@ -611,6 +684,18 @@
                     step.className = 'progress-step pending';
                 }
             });
+
+            updateProgressBar(percentage);
+        }
+
+        // 모든 단계 완료
+        function completeAllSteps() {
+            const steps = document.querySelectorAll('.progress-step');
+            steps.forEach((step) => {
+                step.className = 'progress-step completed';
+                step.innerHTML = step.innerHTML.replace('⏳', '✓').replace('⏸', '✓');
+            });
+            updateProgressBar(100);
         }
 
         // 상태 메시지 표시
