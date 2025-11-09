@@ -176,13 +176,29 @@
             border: 2px solid #e0e0e0;
             border-radius: 10px;
             font-size: 16px;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             transition: border-color 0.3s;
         }
 
         .email-input:focus {
             outline: none;
             border-color: #667eea;
+        }
+
+        .email-input.error {
+            border-color: #dc3545;
+            background: #fff5f5;
+        }
+
+        .email-required {
+            color: #dc3545;
+            font-size: 13px;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .email-required.active {
+            display: block;
         }
 
         .submit-btn {
@@ -359,6 +375,49 @@
             transform: none;
         }
 
+        .survey-required {
+            color: #dc3545;
+            font-size: 13px;
+            margin-top: 10px;
+            padding: 10px;
+            background: #fff5f5;
+            border: 1px solid #dc3545;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .survey-required.active {
+            display: block;
+        }
+
+        .progress-steps {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9ff;
+            border-radius: 5px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .progress-step {
+            padding: 5px 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .progress-step.completed {
+            color: #28a745;
+        }
+
+        .progress-step.active {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .progress-step.pending {
+            color: #ccc;
+        }
+
         .spinner {
             border: 3px solid #f3f3f3;
             border-top: 3px solid #667eea;
@@ -412,11 +471,12 @@
                 type="email"
                 id="emailInput"
                 class="email-input"
-                placeholder="이메일 주소를 입력하세요"
+                placeholder="이메일 주소를 입력하세요 (필수)"
                 required
                 aria-label="이메일 주소"
                 aria-required="true"
             >
+            <div class="email-required" id="emailRequired">✱ 이메일 주소를 입력해주세요</div>
         </section>
 
         <section aria-label="검사 시작">
@@ -479,6 +539,10 @@
                 </div>
             </div>
 
+            <div class="survey-required" id="surveyRequired">
+                ✱ 모든 질문에 답변해주세요
+            </div>
+
             <button class="survey-submit-btn" id="surveySubmitBtn" disabled>
                 검사 시작하기
             </button>
@@ -509,11 +573,13 @@
         const fileName = document.getElementById('fileName');
         const fileSize = document.getElementById('fileSize');
         const emailInput = document.getElementById('emailInput');
+        const emailRequired = document.getElementById('emailRequired');
         const submitBtn = document.getElementById('submitBtn');
         const adContainer = document.getElementById('adContainer');
         const adTimer = document.getElementById('adTimer');
         const surveyContainer = document.getElementById('surveyContainer');
         const surveySubmitBtn = document.getElementById('surveySubmitBtn');
+        const surveyRequired = document.getElementById('surveyRequired');
         const status = document.getElementById('status');
 
         let selectedFile = null;
@@ -541,6 +607,10 @@
         function checkSurveyComplete() {
             if (surveyData.source && surveyData.purpose) {
                 surveySubmitBtn.disabled = false;
+                surveyRequired.classList.remove('active');
+            } else {
+                surveySubmitBtn.disabled = true;
+                surveyRequired.classList.add('active');
             }
         }
 
@@ -624,6 +694,12 @@
             hideStatus();
         }
 
+        // 이메일 입력 시 에러 표시 제거
+        emailInput.addEventListener('input', () => {
+            emailInput.classList.remove('error');
+            emailRequired.classList.remove('active');
+        });
+
         // 제출 버튼 클릭
         submitBtn.addEventListener('click', async () => {
             if (!selectedFile) {
@@ -633,11 +709,16 @@
 
             const email = emailInput.value.trim();
             if (!email) {
+                emailInput.classList.add('error');
+                emailRequired.classList.add('active');
                 showStatus('error', '이메일 주소를 입력해주세요');
                 return;
             }
 
             if (!isValidEmail(email)) {
+                emailInput.classList.add('error');
+                emailRequired.textContent = '✱ 올바른 이메일 형식을 입력해주세요';
+                emailRequired.classList.add('active');
                 showStatus('error', '올바른 이메일 주소를 입력해주세요');
                 return;
             }
@@ -672,13 +753,37 @@
         // 설문조사 표시
         function showSurvey() {
             surveyContainer.classList.add('active');
+            surveyRequired.classList.add('active'); // 초기에 경고 메시지 표시
             submitBtn.disabled = true;
         }
 
         // API 요청
         async function submitToAPI(file, email) {
-            showStatus('loading', '<div class="spinner"></div> 처리 중입니다... 5분 이내에 이메일로 결과를 받으실 수 있습니다');
             submitBtn.disabled = true;
+
+            // 진행 상태 표시
+            const progressHTML = `
+                <div class="spinner"></div>
+                <strong>PDF 맞춤법 검사 진행 중...</strong>
+                <div class="progress-steps">
+                    <div class="progress-step active">⏳ 1단계: PDF 텍스트 추출 중...</div>
+                    <div class="progress-step pending">⏸ 2단계: 텍스트 전처리 대기 중</div>
+                    <div class="progress-step pending">⏸ 3단계: 맞춤법 검사 대기 중</div>
+                    <div class="progress-step pending">⏸ 4단계: 오류 위치 분석 대기 중</div>
+                    <div class="progress-step pending">⏸ 5단계: PDF 하이라이트 생성 대기 중</div>
+                </div>
+                <p style="margin-top: 10px; font-size: 13px;">처리 완료 후 자동으로 다운로드됩니다</p>
+            `;
+            showStatus('loading', progressHTML);
+
+            // 진행 상태 업데이트 시뮬레이션
+            let currentStep = 1;
+            const progressInterval = setInterval(() => {
+                if (currentStep < 5) {
+                    currentStep++;
+                    updateProgressSteps(currentStep);
+                }
+            }, 3000); // 3초마다 다음 단계로
 
             try {
                 const formData = new FormData();
@@ -690,13 +795,31 @@
                     body: formData
                 });
 
-                const result = await response.json();
+                clearInterval(progressInterval);
 
-                if (response.ok && result.status === 'success') {
+                // PDF 파일로 응답받는 경우
+                if (response.ok && response.headers.get('content-type') === 'application/pdf') {
+                    const errorsFound = response.headers.get('X-Errors-Found') || '0';
+                    const blob = await response.blob();
+
+                    // 파일 다운로드
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = file.name.replace('.pdf', '_맞춤법검사.pdf');
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+
+                    updateProgressSteps(5, true); // 모든 단계 완료
                     showStatus('success',
-                        `✓ 검사 요청이 완료되었습니다!<br>` +
-                        `발견된 오류: ${result.errors_found}개<br>` +
-                        `5분 이내에 <strong>${email}</strong>로 결과를 발송해드립니다.`
+                        `✓ 검사가 완료되었습니다!<br>` +
+                        `발견된 오류: ${errorsFound}개<br>` +
+                        `파일이 자동으로 다운로드되었습니다.<br><br>` +
+                        `<strong style="color: #667eea;">💡 주석 확인 방법:</strong><br>` +
+                        `다운로드된 PDF를 <strong>Adobe Acrobat</strong> 또는 주석 기능을 지원하는 PDF 뷰어로 열어주세요.<br>` +
+                        `틀린 부분이 색상별로 하이라이트되어 있으며, 클릭하면 자세한 설명을 볼 수 있습니다.`
                     );
 
                     // 폼 초기화
@@ -704,13 +827,34 @@
                         resetForm();
                     }, 3000);
                 } else {
+                    const result = await response.json();
                     showStatus('error', `✗ 오류 발생: ${result.message}`);
                     submitBtn.disabled = false;
                 }
             } catch (error) {
+                clearInterval(progressInterval);
                 showStatus('error', `✗ 서버 연결 실패: ${error.message}<br>잠시 후 다시 시도해주세요.`);
                 submitBtn.disabled = false;
             }
+        }
+
+        // 진행 상태 업데이트
+        function updateProgressSteps(currentStep, allComplete = false) {
+            const steps = document.querySelectorAll('.progress-step');
+
+            steps.forEach((step, index) => {
+                const stepNumber = index + 1;
+
+                if (allComplete || stepNumber < currentStep) {
+                    step.className = 'progress-step completed';
+                    step.innerHTML = step.innerHTML.replace('⏳', '✓').replace('⏸', '✓');
+                } else if (stepNumber === currentStep) {
+                    step.className = 'progress-step active';
+                    step.innerHTML = step.innerHTML.replace('⏸', '⏳');
+                } else {
+                    step.className = 'progress-step pending';
+                }
+            });
         }
 
         // 상태 메시지 표시
