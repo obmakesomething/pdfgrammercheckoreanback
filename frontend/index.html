@@ -343,6 +343,184 @@
             color: #ccc;
         }
 
+        .results-container {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .results-container.active {
+            display: block;
+        }
+
+        .results-header {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 2px solid #667eea;
+        }
+
+        .results-stats {
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            flex: 1;
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .warning-message {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .errors-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .error-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .error-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.1);
+        }
+
+        .error-card-header {
+            padding: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9ff;
+        }
+
+        .error-card-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+        }
+
+        .error-badge {
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .error-badge.SPACING {
+            background: #007bff;
+        }
+
+        .error-badge.SPELL {
+            background: #dc3545;
+        }
+
+        .error-badge.GRAMMAR {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .error-badge.TYPO {
+            background: #dc3545;
+        }
+
+        .error-badge.default {
+            background: #ff6600;
+        }
+
+        .error-text-wrong {
+            color: #dc3545;
+            font-weight: 600;
+            text-decoration: line-through;
+        }
+
+        .error-text-correct {
+            color: #28a745;
+            font-weight: 600;
+        }
+
+        .error-arrow {
+            color: #999;
+            margin: 0 5px;
+        }
+
+        .error-toggle {
+            color: #667eea;
+            font-size: 20px;
+            transition: transform 0.3s ease;
+        }
+
+        .error-card.expanded .error-toggle {
+            transform: rotate(180deg);
+        }
+
+        .error-card-body {
+            padding: 15px;
+            border-top: 1px solid #e0e0e0;
+            display: none;
+        }
+
+        .error-card.expanded .error-card-body {
+            display: block;
+        }
+
+        .error-detail-row {
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .error-detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .error-detail-label {
+            font-size: 13px;
+            color: #999;
+            margin-bottom: 5px;
+        }
+
+        .error-detail-value {
+            font-size: 15px;
+            color: #333;
+        }
+
+        .page-badge {
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
         .spinner {
             border: 3px solid #f3f3f3;
             border-top: 3px solid #667eea;
@@ -417,6 +595,34 @@
         </aside>
 
         <div class="status" id="status" role="status" aria-live="polite"></div>
+
+        <div class="results-container" id="resultsContainer">
+            <div class="results-header">
+                <h2 style="margin: 0; color: #333;">📊 검사 결과</h2>
+                <div class="results-stats">
+                    <div class="stat-item">
+                        <div class="stat-number" id="statTotal">0</div>
+                        <div class="stat-label">총 발견된 오류</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" id="statHighlighted" style="color: #28a745;">0</div>
+                        <div class="stat-label">PDF에 표시된 오류</div>
+                    </div>
+                    <div class="stat-item" id="statNotHighlightedContainer" style="display: none;">
+                        <div class="stat-number" id="statNotHighlighted" style="color: #ffc107;">0</div>
+                        <div class="stat-label">표시되지 않은 오류</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="warning-message" id="warningMessage" style="display: none;">
+                ⚠️ 일부 오류는 PDF에 하이라이트되지 않았습니다. 아래 목록에서 수동으로 확인해주세요.
+            </div>
+
+            <div class="errors-list" id="errorsList">
+                <!-- 오류 카드가 동적으로 추가됩니다 -->
+            </div>
+        </div>
 
         <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #999; font-size: 12px;">
             <p>&copy; 2024 PDF 맞춤법 검사기. All rights reserved.</p>
@@ -614,36 +820,43 @@
 
                 clearInterval(progressInterval);
 
-                // PDF 파일로 응답받는 경우
-                if (response.ok && response.headers.get('content-type') === 'application/pdf') {
-                    const errorsFound = response.headers.get('X-Errors-Found') || '0';
-                    const blob = await response.blob();
+                // JSON 응답 처리
+                if (response.ok) {
+                    const result = await response.json();
 
-                    // 완료 처리
-                    completeAllSteps();
+                    if (result.status === 'success') {
+                        // 완료 처리
+                        completeAllSteps();
 
-                    // 파일 다운로드
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = file.name.replace('.pdf', '_맞춤법검사.pdf');
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    showStatus('success',
-                        `✓ 검사가 완료되었습니다!<br>` +
-                        `발견된 오류: ${errorsFound}개<br>` +
-                        `파일이 자동으로 다운로드되었습니다.<br><br>` +
-                        `<strong style="color: #667eea;">💡 주석 확인 방법:</strong><br>` +
-                        `다운로드된 PDF를 <strong>Adobe Acrobat</strong> 또는 주석 기능을 지원하는 PDF 뷰어로 열어주세요.<br>` +
-                        `틀린 부분이 색상별로 하이라이트되어 있으며, 클릭하면 자세한 설명을 볼 수 있습니다.`
-                    );
+                        // PDF 다운로드 (base64 디코딩)
+                        const pdfBlob = base64ToBlob(result.pdf_data, 'application/pdf');
+                        const url = window.URL.createObjectURL(pdfBlob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = result.pdf_filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
 
-                    // 폼 초기화
-                    setTimeout(() => {
-                        resetForm();
-                    }, 3000);
+                        // 성공 메시지
+                        showStatus('success',
+                            `✓ 검사가 완료되었습니다!<br>` +
+                            `발견된 오류: ${result.errors_found}개<br>` +
+                            `파일이 자동으로 다운로드되었습니다.<br><br>` +
+                            `<strong style="color: #667eea;">💡 주석 확인 방법:</strong><br>` +
+                            `다운로드된 PDF를 <strong>Adobe Acrobat</strong> 또는 주석 기능을 지원하는 PDF 뷰어로 열어주세요.<br>` +
+                            `틀린 부분이 색상별로 하이라이트되어 있으며, 클릭하면 자세한 설명을 볼 수 있습니다.`
+                        );
+
+                        // 검사 결과 표시
+                        displayResults(result);
+
+                        // 폼 초기화는 하지 않음 (결과를 계속 볼 수 있도록)
+                    } else {
+                        showStatus('error', `✗ 오류 발생: ${result.message}`);
+                        submitBtn.disabled = false;
+                    }
                 } else {
                     const result = await response.json();
                     showStatus('error', `✗ 오류 발생: ${result.message}`);
@@ -696,6 +909,124 @@
                 step.innerHTML = step.innerHTML.replace('⏳', '✓').replace('⏸', '✓');
             });
             updateProgressBar(100);
+        }
+
+        // Base64를 Blob으로 변환
+        function base64ToBlob(base64, contentType) {
+            const byteCharacters = atob(base64);
+            const byteArrays = [];
+
+            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                const slice = byteCharacters.slice(offset, offset + 512);
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) {
+                    byteNumbers[i] = slice.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                byteArrays.push(byteArray);
+            }
+
+            return new Blob(byteArrays, {type: contentType});
+        }
+
+        // 검사 결과 표시
+        function displayResults(result) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            const errorsList = document.getElementById('errorsList');
+            const statTotal = document.getElementById('statTotal');
+            const statHighlighted = document.getElementById('statHighlighted');
+            const statNotHighlighted = document.getElementById('statNotHighlighted');
+            const statNotHighlightedContainer = document.getElementById('statNotHighlightedContainer');
+            const warningMessage = document.getElementById('warningMessage');
+
+            // 통계 업데이트
+            statTotal.textContent = result.errors_found;
+            statHighlighted.textContent = result.errors_highlighted;
+
+            const notHighlighted = result.errors_found - result.errors_highlighted;
+            if (notHighlighted > 0) {
+                statNotHighlighted.textContent = notHighlighted;
+                statNotHighlightedContainer.style.display = 'block';
+                warningMessage.style.display = 'block';
+            }
+
+            // 오류 카드 생성
+            errorsList.innerHTML = '';
+            result.errors.forEach((error, index) => {
+                const card = createErrorCard(error, index);
+                errorsList.appendChild(card);
+            });
+
+            // 결과 컨테이너 표시
+            resultsContainer.classList.add('active');
+
+            // 스크롤
+            resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 오류 카드 생성
+        function createErrorCard(error, index) {
+            const card = document.createElement('div');
+            card.className = 'error-card';
+            card.id = `error-card-${index}`;
+
+            const category = error.category || 'default';
+            const categoryName = {
+                'SPACING': '띄어쓰기',
+                'SPELL': '맞춤법',
+                'GRAMMAR': '문법',
+                'TYPO': '오타'
+            }[category] || '기타';
+
+            card.innerHTML = `
+                <div class="error-card-header" onclick="toggleErrorCard(${index})">
+                    <div class="error-card-title">
+                        <span class="error-badge ${category}">${categoryName}</span>
+                        <span class="error-text-wrong">${escapeHtml(error.wrong)}</span>
+                        <span class="error-arrow">→</span>
+                        <span class="error-text-correct">${escapeHtml(error.correct)}</span>
+                        ${error.page ? `<span class="page-badge">p.${error.page}</span>` : ''}
+                    </div>
+                    <div class="error-toggle">▼</div>
+                </div>
+                <div class="error-card-body">
+                    <div class="error-detail-row">
+                        <div class="error-detail-label">틀린 표현</div>
+                        <div class="error-detail-value">${escapeHtml(error.wrong)}</div>
+                    </div>
+                    <div class="error-detail-row">
+                        <div class="error-detail-label">올바른 표현</div>
+                        <div class="error-detail-value">${escapeHtml(error.correct)}</div>
+                    </div>
+                    ${error.help ? `
+                    <div class="error-detail-row">
+                        <div class="error-detail-label">설명</div>
+                        <div class="error-detail-value">${escapeHtml(error.help)}</div>
+                    </div>
+                    ` : ''}
+                    ${error.page ? `
+                    <div class="error-detail-row">
+                        <div class="error-detail-label">위치</div>
+                        <div class="error-detail-value">페이지 ${error.page}</div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+
+            return card;
+        }
+
+        // 오류 카드 토글
+        function toggleErrorCard(index) {
+            const card = document.getElementById(`error-card-${index}`);
+            card.classList.toggle('expanded');
+        }
+
+        // HTML 이스케이프
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // 상태 메시지 표시

@@ -11,6 +11,7 @@ import tempfile
 import uuid
 import csv
 import datetime
+import base64
 from main_processor import GrammarCheckProcessor
 from email_sender import EmailSender
 from dotenv import load_dotenv
@@ -130,28 +131,45 @@ def check_pdf():
         except Exception as e:
             print(f"이메일 저장 실패: {e}")
 
-        # 5. PDF 파일 반환 (다운로드)
+        # 5. JSON 응답 반환 (오류 목록 + PDF)
         if result['success']:
             # 오류가 있으면 수정된 PDF, 없으면 원본 PDF
             pdf_to_send = output_pdf_path if result['errors_found'] > 0 else input_pdf_path
 
             if os.path.exists(pdf_to_send):
+                # PDF 파일을 base64로 인코딩
+                with open(pdf_to_send, 'rb') as f:
+                    pdf_bytes = f.read()
+                    pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+
                 # 파일 이름 생성
                 base_name = os.path.splitext(pdf_file.filename)[0]
                 download_name = f"{base_name}_맞춤법검사.pdf"
 
-                response = send_file(
-                    pdf_to_send,
-                    mimetype='application/pdf',
-                    as_attachment=True,
-                    download_name=download_name
-                )
-                # 오류 개수를 헤더에 추가
-                response.headers['X-Errors-Found'] = str(result['errors_found'])
-                # CORS 헤더 명시적으로 추가
-                response.headers['Access-Control-Allow-Origin'] = '*'
-                response.headers['Access-Control-Expose-Headers'] = 'X-Errors-Found'
-                return response
+                # 오류 목록 가져오기
+                errors_list = result.get('annotations', [])
+
+                # JSON 응답 생성
+                response_data = {
+                    'status': 'success',
+                    'message': f'{result["errors_found"]}개의 맞춤법 오류를 발견했습니다.',
+                    'errors_found': result['errors_found'],
+                    'errors_highlighted': len(errors_list),
+                    'errors': errors_list,
+                    'pdf_data': pdf_base64,
+                    'pdf_filename': download_name
+                }
+
+                # 임시 파일 삭제
+                try:
+                    if os.path.exists(input_pdf_path):
+                        os.remove(input_pdf_path)
+                    if os.path.exists(output_pdf_path):
+                        os.remove(output_pdf_path)
+                except Exception as e:
+                    print(f"임시 파일 삭제 실패: {e}")
+
+                return jsonify(response_data), 200
             else:
                 return jsonify({
                     'status': 'error',

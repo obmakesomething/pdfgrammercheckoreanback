@@ -165,6 +165,7 @@ class GrammarCheckProcessor:
                         'wrong': error['wrong'],
                         'correct': error['correct'],
                         'help': error.get('help', ''),
+                        'category': error.get('category', 'default'),
                         'page': first_char_info['page'],
                         'x': first_char_info.get('x'),
                         'y': first_char_info.get('y')
@@ -176,6 +177,7 @@ class GrammarCheckProcessor:
                     'wrong': error['wrong'],
                     'correct': error['correct'],
                     'help': error.get('help', ''),
+                    'category': error.get('category', 'default'),
                     'page': 1,
                     'x': None,
                     'y': None
