@@ -2,37 +2,34 @@
 # -*- coding: utf-8 -*-
 """
 이메일 발송 모듈
-Resend API를 사용하여 PDF 첨부 이메일 발송
+Gmail SMTP를 사용하여 PDF 첨부 이메일 발송
 """
 import os
 import base64
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 from dotenv import load_dotenv
 
 # 환경 변수 로드
 load_dotenv()
 
-# Resend 라이브러리 import (설치된 경우)
-try:
-    import resend
-    RESEND_AVAILABLE = True
-except ImportError:
-    RESEND_AVAILABLE = False
-    print("경고: resend 라이브러리가 설치되지 않았습니다")
-
 
 class EmailSender:
-    """Resend API를 사용한 이메일 발송 클래스"""
+    """Gmail SMTP를 사용한 이메일 발송 클래스"""
 
     def __init__(self):
-        if RESEND_AVAILABLE:
-            api_key = os.getenv('RESEND_API_KEY')
-            print(f"DEBUG: RESEND_API_KEY = {api_key[:10] if api_key else 'None'}...")
-            resend.api_key = api_key
-        self.from_email = os.getenv(
-            'RESEND_FROM_EMAIL',
-            'noreply@pdfgrammercheckorean.site'
-        )
-        print(f"DEBUG: FROM_EMAIL = {self.from_email}")
+        self.gmail_email = os.getenv('GMAIL_SENDER_EMAIL')
+        self.gmail_password = os.getenv('GMAIL_APP_PASSWORD')
+        self.smtp_server = 'smtp.gmail.com'
+        self.smtp_port = 587
+
+        if not self.gmail_email or not self.gmail_password:
+            print("경고: Gmail 설정이 .env 파일에 없습니다")
+        else:
+            print(f"✓ Gmail SMTP 설정 완료: {self.gmail_email}")
 
     def send_grammar_check_result(
         self,
@@ -53,7 +50,7 @@ class EmailSender:
         Returns:
             bool: 발송 성공 여부
         """
-        if not RESEND_AVAILABLE:
+        if not self.gmail_email or not self.gmail_password:
             print("[시뮬레이션] 이메일 발송:")
             print(f"  수신: {to_email}")
             print(f"  파일: {pdf_path}")
@@ -61,14 +58,13 @@ class EmailSender:
             return True
 
         try:
-            # PDF 파일 읽기
-            with open(pdf_path, 'rb') as f:
-                pdf_content = f.read()
-                pdf_base64 = base64.b64encode(pdf_content).decode()
+            # 이메일 메시지 생성
+            msg = MIMEMultipart('alternative')
+            msg['From'] = f"PDF 맞춤법 검사기 <{self.gmail_email}>"
+            msg['To'] = to_email
+            msg['Subject'] = "[PDF 맞춤법 검사 완료] 결과를 확인하세요"
 
-            # 이메일 내용 구성
-            subject = "[PDF 맞춤법 검사 완료] 결과를 확인하세요"
-
+            # HTML 본문
             html_body = f"""
             <html>
             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -127,23 +123,34 @@ class EmailSender:
 PDF 한국어 맞춤법 검사기
             """
 
-            # Resend API로 이메일 발송
-            response = resend.Emails.send({
-                "from": self.from_email,
-                "to": to_email,
-                "subject": subject,
-                "html": html_body,
-                "text": text_body,
-                "attachments": [
-                    {
-                        "filename": f"{os.path.splitext(original_filename)[0]}_검사완료.pdf",
-                        "content": pdf_base64
-                    }
-                ]
-            })
+            # 텍스트와 HTML 본문 추가
+            part1 = MIMEText(text_body, 'plain', 'utf-8')
+            part2 = MIMEText(html_body, 'html', 'utf-8')
+            msg.attach(part1)
+            msg.attach(part2)
+
+            # PDF 첨부 파일 추가
+            with open(pdf_path, 'rb') as f:
+                pdf_content = f.read()
+
+            attachment = MIMEBase('application', 'pdf')
+            attachment.set_payload(pdf_content)
+            encoders.encode_base64(attachment)
+
+            filename = f"{os.path.splitext(original_filename)[0]}_검사완료.pdf"
+            attachment.add_header(
+                'Content-Disposition',
+                f'attachment; filename*=UTF-8\'\'{filename}'
+            )
+            msg.attach(attachment)
+
+            # SMTP 서버 연결 및 이메일 발송
+            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                server.starttls()  # TLS 암호화
+                server.login(self.gmail_email, self.gmail_password)
+                server.send_message(msg)
 
             print(f"✓ 이메일 발송 완료: {to_email}")
-            print(f"  Resend ID: {response.get('id', 'N/A')}")
             return True
 
         except Exception as e:
@@ -163,12 +170,16 @@ PDF 한국어 맞춤법 검사기
         Returns:
             bool: 발송 성공 여부
         """
-        if not RESEND_AVAILABLE:
+        if not self.gmail_email or not self.gmail_password:
             print(f"[시뮬레이션] 오류 알림 발송: {to_email}")
             return True
 
         try:
-            subject = "[PDF 맞춤법 검사] 처리 중 오류 발생"
+            # 이메일 메시지 생성
+            msg = MIMEMultipart('alternative')
+            msg['From'] = f"PDF 맞춤법 검사기 <{self.gmail_email}>"
+            msg['To'] = to_email
+            msg['Subject'] = "[PDF 맞춤법 검사] 처리 중 오류 발생"
 
             html_body = f"""
             <html>
@@ -212,13 +223,17 @@ PDF 한국어 맞춤법 검사기
 PDF 한국어 맞춤법 검사기
             """
 
-            response = resend.Emails.send({
-                "from": self.from_email,
-                "to": to_email,
-                "subject": subject,
-                "html": html_body,
-                "text": text_body
-            })
+            # 텍스트와 HTML 본문 추가
+            part1 = MIMEText(text_body, 'plain', 'utf-8')
+            part2 = MIMEText(html_body, 'html', 'utf-8')
+            msg.attach(part1)
+            msg.attach(part2)
+
+            # SMTP 서버 연결 및 이메일 발송
+            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                server.starttls()
+                server.login(self.gmail_email, self.gmail_password)
+                server.send_message(msg)
 
             print(f"✓ 오류 알림 발송 완료: {to_email}")
             return True
