@@ -131,7 +131,28 @@ def check_pdf():
         except Exception as e:
             print(f"이메일 저장 실패: {e}")
 
-        # 5. JSON 응답 반환 (오류 목록 + PDF)
+        # 5. 이메일 발송 (백그라운드)
+        if result['success'] and result['errors_found'] > 0:
+            pdf_to_send = output_pdf_path
+
+            # 이메일 발송 시도 (실패해도 웹 응답은 정상 처리)
+            try:
+                print(f"\n이메일 발송 시도: {email}")
+                email_success = email_sender.send_grammar_check_result(
+                    to_email=email,
+                    pdf_path=pdf_to_send,
+                    errors_count=result['errors_found'],
+                    original_filename=pdf_file.filename
+                )
+
+                if email_success:
+                    print(f"✓ 이메일 발송 성공: {email}")
+                else:
+                    print(f"⚠ 이메일 발송 실패: {email} (웹 응답은 정상 처리)")
+            except Exception as e:
+                print(f"⚠ 이메일 발송 오류: {e} (웹 응답은 정상 처리)")
+
+        # 6. JSON 응답 반환 (오류 목록 + PDF)
         if result['success']:
             # 오류가 있으면 수정된 PDF, 없으면 원본 PDF
             pdf_to_send = output_pdf_path if result['errors_found'] > 0 else input_pdf_path
@@ -152,7 +173,7 @@ def check_pdf():
                 # JSON 응답 생성
                 response_data = {
                     'status': 'success',
-                    'message': f'{result["errors_found"]}개의 맞춤법 오류를 발견했습니다.',
+                    'message': f'{result["errors_found"]}개의 맞춤법 오류를 발견했습니다. 이메일로도 발송되었습니다.',
                     'errors_found': result['errors_found'],
                     'errors_highlighted': len(errors_list),
                     'errors': errors_list,
