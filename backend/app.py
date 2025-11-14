@@ -4,14 +4,13 @@
 Flask API 서버
 PDF 맞춤법 검사 API 제공
 """
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, after_this_request
 from flask_cors import CORS
 import os
 import tempfile
 import uuid
 import csv
 import datetime
-import base64
 from main_processor import GrammarCheckProcessor
 from email_sender import EmailSender
 from dotenv import load_dotenv
@@ -25,6 +24,19 @@ CORS(app)  # CORS 허용
 # 프로세서 및 이메일 발송기 초기화
 processor = GrammarCheckProcessor()
 email_sender = EmailSender()
+
+
+@app.route('/', methods=['GET'])
+def root():
+    """루트 엔드포인트 - Railway 헬스체크용"""
+    return jsonify({
+        'status': 'ok',
+        'service': 'PDF Korean Grammar Checker API',
+        'endpoints': {
+            'health': '/health',
+            'check_pdf': '/api/check-pdf'
+        }
+    }), 200
 
 
 @app.route('/health', methods=['GET'])
@@ -83,15 +95,15 @@ def check_pdf():
                 'message': 'PDF 파일만 업로드 가능합니다'
             }), 400
 
-        # 파일 크기 검증 (20MB)
+        # 파일 크기 검증 (30MB)
         pdf_file.seek(0, os.SEEK_END)
         file_size = pdf_file.tell()
         pdf_file.seek(0)
 
-        if file_size > 20 * 1024 * 1024:  # 20MB
+        if file_size > 30 * 1024 * 1024:  # 30MB
             return jsonify({
                 'status': 'error',
-                'message': '파일 크기는 20MB 이하여야 합니다'
+                'message': '파일 크기는 30MB 이하여야 합니다'
             }), 400
 
         print(f"\n{'=' * 60}")
@@ -152,45 +164,39 @@ def check_pdf():
             except Exception as e:
                 print(f"⚠ 이메일 발송 오류: {e} (웹 응답은 정상 처리)")
 
-        # 6. JSON 응답 반환 (오류 목록 + PDF)
+        # 6. PDF 파일 반환 (다운로드)
         if result['success']:
             # 오류가 있으면 수정된 PDF, 없으면 원본 PDF
             pdf_to_send = output_pdf_path if result['errors_found'] > 0 else input_pdf_path
 
             if os.path.exists(pdf_to_send):
-                # PDF 파일을 base64로 인코딩
-                with open(pdf_to_send, 'rb') as f:
-                    pdf_bytes = f.read()
-                    pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+                @after_this_request
+                def remove_temp_files(response):
+                    try:
+                        if os.path.exists(input_pdf_path):
+                            os.remove(input_pdf_path)
+                        if os.path.exists(output_pdf_path):
+                            os.remove(output_pdf_path)
+                    except Exception as cleanup_error:
+                        print(f"임시 파일 삭제 실패: {cleanup_error}")
+                    return response
 
                 # 파일 이름 생성
                 base_name = os.path.splitext(pdf_file.filename)[0]
                 download_name = f"{base_name}_맞춤법검사.pdf"
 
-                # 오류 목록 가져오기
-                errors_list = result.get('annotations', [])
-
-                # JSON 응답 생성
-                response_data = {
-                    'status': 'success',
-                    'message': f'{result["errors_found"]}개의 맞춤법 오류를 발견했습니다. 이메일로도 발송되었습니다.',
-                    'errors_found': result['errors_found'],
-                    'errors_highlighted': len(errors_list),
-                    'errors': errors_list,
-                    'pdf_data': pdf_base64,
-                    'pdf_filename': download_name
-                }
-
-                # 임시 파일 삭제
-                try:
-                    if os.path.exists(input_pdf_path):
-                        os.remove(input_pdf_path)
-                    if os.path.exists(output_pdf_path):
-                        os.remove(output_pdf_path)
-                except Exception as e:
-                    print(f"임시 파일 삭제 실패: {e}")
-
-                return jsonify(response_data), 200
+                response = send_file(
+                    pdf_to_send,
+                    mimetype='application/pdf',
+                    as_attachment=True,
+                    download_name=download_name
+                )
+                # 오류 개수를 헤더에 추가
+                response.headers['X-Errors-Found'] = str(result['errors_found'])
+                # CORS 헤더 명시적으로 추가
+                response.headers['Access-Control-Allow-Origin'] = '*'
+                response.headers['Access-Control-Expose-Headers'] = 'X-Errors-Found'
+                return response
             else:
                 return jsonify({
                     'status': 'error',
@@ -287,6 +293,67 @@ def submit_survey():
         return jsonify({
             'status': 'error',
             'message': '설문조사 제출 중 오류가 발생했습니다'
+        }), 500
+
+
+@app.route('/api/feedback', methods=['POST'])
+def submit_feedback():
+    """
+    사용자 피드백 저장 API
+
+    Request:
+        - application/json
+        - feedback: 피드백 내용 (필수)
+        - email: 이메일 (선택)
+
+    Response:
+        {'status': 'success', 'message': '피드백이 저장되었습니다'}
+    """
+    try:
+        data = request.get_json()
+
+        feedback = data.get('feedback')
+        email = data.get('email', '익명')
+
+        if not feedback or not feedback.strip():
+            return jsonify({
+                'status': 'error',
+                'message': '피드백 내용을 입력해주세요'
+            }), 400
+
+        # 피드백 데이터 저장
+        timestamp = datetime.datetime.now().isoformat()
+
+        feedback_log = {
+            'timestamp': timestamp,
+            'email': email,
+            'feedback': feedback.strip()
+        }
+
+        print(f"\n[사용자 피드백] {feedback_log}")
+
+        # CSV 파일로 저장
+        csv_file = 'user_feedback.csv'
+        file_exists = os.path.exists(csv_file)
+
+        with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['timestamp', 'email', 'feedback'])
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(feedback_log)
+
+        print(f"피드백 저장 완료: {email}")
+
+        return jsonify({
+            'status': 'success',
+            'message': '피드백이 저장되었습니다'
+        }), 200
+
+    except Exception as e:
+        print(f"피드백 저장 오류: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': '피드백 저장 중 오류가 발생했습니다'
         }), 500
 
 

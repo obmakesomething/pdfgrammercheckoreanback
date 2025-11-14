@@ -4,6 +4,7 @@ import { useState } from 'react'
 import PDFUploader from '@/components/PDFUploader'
 import AdPlayer from '@/components/AdPlayer'
 import SEOContent from '@/components/SEOContent'
+import FeedbackForm from '@/components/FeedbackForm'
 
 export default function Home() {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
@@ -185,6 +186,11 @@ export default function Home() {
 
         {/* SEO Content */}
         <SEOContent />
+
+        {/* Feedback Form */}
+        {!showAd && (
+          <FeedbackForm />
+        )}
       </div>
 
       {/* Progress Popup */}

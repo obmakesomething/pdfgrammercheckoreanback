@@ -559,7 +559,7 @@
             <div class="upload-area" id="uploadArea" role="button" tabindex="0" aria-label="PDF 파일 업로드">
                 <div class="upload-icon" aria-hidden="true">📄</div>
                 <div class="upload-text">PDF 파일을 선택하거나 드래그하세요</div>
-                <div class="upload-hint">최대 20MB까지 업로드 가능합니다</div>
+                <div class="upload-hint">최대 30MB까지 업로드 가능합니다</div>
                 <input type="file" id="fileInput" class="file-input" accept=".pdf" aria-label="PDF 파일 선택">
             </div>
 
@@ -691,7 +691,7 @@
             }
 
             if (file.size > 20 * 1024 * 1024) {
-                showStatus('error', '파일 크기는 20MB 이하여야 합니다');
+                showStatus('error', '파일 크기는 30MB 이하여야 합니다');
                 return;
             }
 

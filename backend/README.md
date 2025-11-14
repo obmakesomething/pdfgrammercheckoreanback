@@ -109,7 +109,7 @@ curl -X POST http://localhost:5000/api/check-pdf \
 ```json
 {
   "status": "error",
-  "message": "파일 크기는 20MB 이하여야 합니다"
+  "message": "파일 크기는 30MB 이하여야 합니다"
 }
 ```
 
@@ -241,7 +241,7 @@ PDF의 양끝정렬로 인해 단어가 하이픈과 줄바꿈으로 분리되�
 
 ## 제한사항
 
-- 최대 파일 크기: 20MB
+- 최대 파일 크기: 30MB
 - 맞춤법 검사 단위: 300자
 - 외부 API 의존 (부산대, 네이버)
 - PDF 좌표 추출 제한 (PyPDF2)

@@ -111,7 +111,7 @@ PDF 파일의 맞춤법을 검사합니다.
 **Request:**
 ```
 multipart/form-data
-- pdf: PDF 파일 (최대 20MB)
+- pdf: PDF 파일 (최대 30MB)
 - email: 이메일 주소
 ```
 

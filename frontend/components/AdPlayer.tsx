@@ -16,6 +16,7 @@ declare global {
 export default function AdPlayer({ onAdComplete, onAdError }: AdPlayerProps) {
   const adContainerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const adCompletedRef = useRef(false)
 
   useEffect(() => {
     if (!adContainerRef.current || !videoRef.current) return
@@ -75,12 +76,11 @@ export default function AdPlayer({ onAdComplete, onAdError }: AdPlayerProps) {
           }
         }
       )
-      let adCompleted = false
       adsManager.addEventListener(
         window.google.ima.AdEvent.Type.ALL_ADS_COMPLETED,
         () => {
-          if (!adCompleted) {
-            adCompleted = true
+          if (!adCompletedRef.current) {
+            adCompletedRef.current = true
             onAdComplete()
             adsManager.destroy()
           }
@@ -89,8 +89,8 @@ export default function AdPlayer({ onAdComplete, onAdError }: AdPlayerProps) {
       adsManager.addEventListener(
         window.google.ima.AdEvent.Type.COMPLETE,
         () => {
-          if (!adCompleted) {
-            adCompleted = true
+          if (!adCompletedRef.current) {
+            adCompletedRef.current = true
             onAdComplete()
           }
         }

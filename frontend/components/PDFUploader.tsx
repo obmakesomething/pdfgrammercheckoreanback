@@ -38,10 +38,10 @@ export default function PDFUploader({
       return
     }
 
-    // Validate file size (20MB)
-    const maxSize = 20 * 1024 * 1024
+    // Validate file size (30MB)
+    const maxSize = 30 * 1024 * 1024
     if (file.size > maxSize) {
-      alert('파일 크기는 20MB 이하여야 합니다.')
+      alert('파일 크기는 30MB 이하여야 합니다.')
       return
     }
 
@@ -59,9 +59,9 @@ export default function PDFUploader({
       return
     }
 
-    const maxSize = 20 * 1024 * 1024
+    const maxSize = 30 * 1024 * 1024
     if (file.size > maxSize) {
-      alert('파일 크기는 20MB 이하여야 합니다.')
+      alert('파일 크기는 30MB 이하여야 합니다.')
       return
     }
 
@@ -119,7 +119,7 @@ export default function PDFUploader({
           ) : (
             <div className="text-gray-600">
               <p className="text-lg font-semibold">PDF 파일을 드래그하거나 클릭하여 선택</p>
-              <p className="text-sm mt-2">최대 20MB</p>
+              <p className="text-sm mt-2">최대 30MB</p>
             </div>
           )}
         </label>

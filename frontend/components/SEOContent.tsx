@@ -21,7 +21,7 @@ export default function SEOContent() {
           <li>맞춤법 오류를 빨간색으로 강조 표시</li>
           <li>각 오류에 대한 수정 제안 제공</li>
           <li>검사 완료된 PDF를 이메일로 전송</li>
-          <li>최대 20MB 크기의 PDF 파일 지원</li>
+          <li>최대 30MB 크기의 PDF 파일 지원</li>
           <li>완전 무료 서비스</li>
         </ul>
       </section>
@@ -114,7 +114,7 @@ export default function SEOContent() {
               Q: 파일 크기 제한이 있나요?
             </h3>
             <p className="mt-2">
-              A: 최대 20MB까지 업로드 가능합니다.
+              A: 최대 30MB까지 업로드 가능합니다.
               대부분의 문서는 이 크기 내에서 처리 가능합니다.
             </p>
           </div>
