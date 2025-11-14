@@ -128,19 +128,19 @@ export default function PDFUploader({
       {/* Email Input */}
       <div>
         <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-          이메일 주소
+          이메일 주소 (선택)
         </label>
         <input
           type="email"
           id="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="example@email.com"
+          placeholder="다운로드 알림을 받으실 이메일 (선택)"
           className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
           disabled={isProcessing}
         />
         <p className="text-xs text-gray-500 mt-2">
-          검사 완료 후 수정된 PDF 파일을 다운로드하실 수 있습니다
+          입력하지 않아도 PDF는 즉시 다운로드됩니다. 입력 시 추후 알림 용도로만 사용됩니다.
         </p>
       </div>
 
@@ -188,7 +188,7 @@ export default function PDFUploader({
             >
               개인정보 처리방침
             </a>
-            에 동의하며, 이메일 주소 수집 및 서비스 제공 목적으로의 사용에 동의합니다
+            에 동의하며, 이메일을 입력한 경우에 한해 결과 안내 목적으로 활용됨을 이해합니다
           </label>
         </div>
       </div>
@@ -196,9 +196,9 @@ export default function PDFUploader({
       {/* Submit Button */}
       <button
         onClick={onSubmit}
-        disabled={isProcessing || !pdfFile || !email || !agreedToTerms || !agreedToPrivacy}
+        disabled={isProcessing || !pdfFile || !agreedToTerms || !agreedToPrivacy}
         className={`w-full py-4 px-6 rounded-lg font-semibold text-white text-lg transition-all ${
-          isProcessing || !pdfFile || !email || !agreedToTerms || !agreedToPrivacy
+          isProcessing || !pdfFile || !agreedToTerms || !agreedToPrivacy
             ? 'bg-gray-400 cursor-not-allowed'
             : 'bg-blue-600 hover:bg-blue-700 active:scale-95'
         }`}

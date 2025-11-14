@@ -5,6 +5,7 @@ import PDFUploader from '@/components/PDFUploader'
 import AdPlayer from '@/components/AdPlayer'
 import SEOContent from '@/components/SEOContent'
 import FeedbackForm from '@/components/FeedbackForm'
+import ContactForm from '@/components/ContactForm'
 
 export default function Home() {
   const [pdfFile, setPdfFile] = useState<File | null>(null)
@@ -24,7 +25,7 @@ export default function Home() {
       return
     }
 
-    if (!email || !validateEmail(email)) {
+    if (email && !validateEmail(email)) {
       setMessage({ type: 'error', text: '올바른 이메일 주소를 입력해주세요.' })
       return
     }
@@ -61,7 +62,9 @@ export default function Home() {
 
       const formData = new FormData()
       formData.append('pdf', pdfFile!)
-      formData.append('email', email)
+      if (email) {
+        formData.append('email', email)
+      }
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.pdfgrammercheckorean.site'
 
@@ -187,9 +190,12 @@ export default function Home() {
         {/* SEO Content */}
         <SEOContent />
 
-        {/* Feedback Form */}
+        {/* Feedback + Contact */}
         {!showAd && (
-          <FeedbackForm />
+          <div className="space-y-6">
+            <FeedbackForm />
+            <ContactForm />
+          </div>
         )}
       </div>
 

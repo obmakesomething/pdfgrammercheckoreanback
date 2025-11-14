@@ -7,7 +7,7 @@
 
     <!-- SEO 메타 태그 -->
     <title>PDF 맞춤법 검사기 | 무료 한국어 문법 교정 도구</title>
-    <meta name="description" content="PDF 파일의 맞춤법과 문법을 무료로 검사하세요. AI 기반 바른 API로 정확한 맞춤법 검사. 회원가입 없이 바로 사용 가능. 5분 이내 이메일 전송.">
+    <meta name="description" content="PDF 파일의 맞춤법과 문법을 무료로 검사하세요. AI 기반 바른 API로 정확한 맞춤법 검사. 회원가입 없이 바로 사용 가능하며 검사 후 즉시 PDF를 다운로드할 수 있습니다.">
     <meta name="keywords" content="PDF 맞춤법, PDF 문법검사, 한국어 맞춤법, 맞춤법 교정, 문법 검사, 무료 맞춤법, 바른 API, 띄어쓰기 검사">
     <meta name="author" content="PDF Grammar Checker">
     <meta name="robots" content="index, follow">
@@ -61,7 +61,7 @@
         "PDF 맞춤법 검사",
         "문법 교정",
         "띄어쓰기 검사",
-        "이메일 전송",
+        "즉시 다운로드",
         "무료 사용"
       ]
     }
@@ -352,6 +352,52 @@
             display: block;
         }
 
+        .contact-section {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .contact-textarea {
+            width: 100%;
+            min-height: 120px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 12px;
+            resize: vertical;
+            font-size: 14px;
+        }
+
+        .contact-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+        }
+
+        .contact-btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .contact-btn:disabled {
+            background: #cbd5f5;
+            cursor: not-allowed;
+        }
+
+        .contact-status {
+            font-size: 13px;
+            text-align: center;
+        }
+
         .results-header {
             background: #f8f9ff;
             padding: 20px;
@@ -574,12 +620,10 @@
                 type="email"
                 id="emailInput"
                 class="email-input"
-                placeholder="이메일 주소를 입력하세요 (필수)"
-                required
-                aria-label="이메일 주소"
-                aria-required="true"
+                placeholder="결과 안내를 받고 싶다면 이메일을 입력하세요 (선택)"
+                aria-label="이메일 주소 (선택)"
             >
-            <div class="email-required" id="emailRequired">✱ 이메일 주소를 입력해주세요</div>
+            <div class="email-required" id="emailRequired">✱ 올바른 이메일 형식을 입력해주세요</div>
         </section>
 
         <section aria-label="검사 시작">
@@ -624,6 +668,18 @@
             </div>
         </div>
 
+        <section class="contact-section" aria-label="문의하기">
+            <h3 style="font-size: 16px; color: #333;">📩 추가 문의 사항</h3>
+            <textarea
+                id="contactMessage"
+                class="contact-textarea"
+                placeholder="서비스 개선 제안, 문의 사항을 자유롭게 남겨주세요."
+                aria-label="문의 내용 입력"
+            ></textarea>
+            <button class="contact-btn" id="contactSubmit">문의 보내기</button>
+            <div class="contact-status" id="contactStatus"></div>
+        </section>
+
         <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #999; font-size: 12px;">
             <p>&copy; 2024 PDF 맞춤법 검사기. All rights reserved.</p>
             <p style="margin-top: 5px;">
@@ -638,7 +694,8 @@
     <script>
         // API 엔드포인트 (개발 환경)
         const API_URL = 'http://localhost:5000/api/check-pdf';
-        // 프로덕션 환경: 'https://api.pdfgrammercheckorean.site/api/check-pdf'
+        const CONTACT_URL = 'http://localhost:5000/api/contact';
+        // 프로덕션 환경: 'https://api.pdfgrammercheckorean.site/api/check-pdf' 및 '/api/contact'
 
         // DOM 요소
         const uploadArea = document.getElementById('uploadArea');
@@ -652,6 +709,9 @@
         const adContainer = document.getElementById('adContainer');
         const adTimer = document.getElementById('adTimer');
         const status = document.getElementById('status');
+        const contactMessageInput = document.getElementById('contactMessage');
+        const contactSubmitBtn = document.getElementById('contactSubmit');
+        const contactStatus = document.getElementById('contactStatus');
 
         let selectedFile = null;
 
@@ -690,7 +750,7 @@
                 return;
             }
 
-            if (file.size > 20 * 1024 * 1024) {
+            if (file.size > 30 * 1024 * 1024) {
                 showStatus('error', '파일 크기는 30MB 이하여야 합니다');
                 return;
             }
@@ -708,6 +768,46 @@
             emailRequired.classList.remove('active');
         });
 
+        contactSubmitBtn.addEventListener('click', async () => {
+            const message = contactMessageInput.value.trim();
+            if (!message) {
+                contactStatus.textContent = '문의 내용을 입력해주세요.';
+                contactStatus.style.color = '#e11d48';
+                return;
+            }
+
+            contactSubmitBtn.disabled = true;
+            contactStatus.textContent = '전송 중입니다...';
+            contactStatus.style.color = '#4b5563';
+
+            try {
+                const response = await fetch(CONTACT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message,
+                        email: emailInput.value.trim() || '익명'
+                    })
+                });
+
+                if (response.ok) {
+                    contactStatus.textContent = '문의가 접수되었습니다. 감사합니다!';
+                    contactStatus.style.color = '#16a34a';
+                    contactMessageInput.value = '';
+                } else {
+                    const data = await response.json();
+                    throw new Error(data.message || '문의 전송 실패');
+                }
+            } catch (error) {
+                contactStatus.textContent = '문의 전송에 실패했습니다. 잠시 후 다시 시도해주세요.';
+                contactStatus.style.color = '#e11d48';
+            } finally {
+                contactSubmitBtn.disabled = false;
+            }
+        });
+
         // 제출 버튼 클릭
         submitBtn.addEventListener('click', async () => {
             if (!selectedFile) {
@@ -716,14 +816,7 @@
             }
 
             const email = emailInput.value.trim();
-            if (!email) {
-                emailInput.classList.add('error');
-                emailRequired.classList.add('active');
-                showStatus('error', '이메일 주소를 입력해주세요');
-                return;
-            }
-
-            if (!isValidEmail(email)) {
+            if (email && !isValidEmail(email)) {
                 emailInput.classList.add('error');
                 emailRequired.textContent = '✱ 올바른 이메일 형식을 입력해주세요';
                 emailRequired.classList.add('active');
@@ -811,7 +904,9 @@
             try {
                 const formData = new FormData();
                 formData.append('pdf', file);
-                formData.append('email', email);
+                if (email) {
+                    formData.append('email', email);
+                }
 
                 const response = await fetch(API_URL, {
                     method: 'POST',
@@ -820,44 +915,38 @@
 
                 clearInterval(progressInterval);
 
-                // JSON 응답 처리
+                // 응답 처리
                 if (response.ok) {
-                    const result = await response.json();
+                    // 완료 처리
+                    completeAllSteps();
 
-                    if (result.status === 'success') {
-                        // 완료 처리
-                        completeAllSteps();
+                    const errorsCount = parseInt(response.headers.get('X-Errors-Found') || '0', 10);
 
-                        // PDF 다운로드 (base64 디코딩)
-                        const pdfBlob = base64ToBlob(result.pdf_data, 'application/pdf');
-                        const url = window.URL.createObjectURL(pdfBlob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = result.pdf_filename;
-                        document.body.appendChild(a);
-                        a.click();
-                        window.URL.revokeObjectURL(url);
-                        document.body.removeChild(a);
+                    // PDF 다운로드
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${selectedFile.name.replace('.pdf', '')}_맞춤법검사.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
 
-                        // 성공 메시지
-                        showStatus('success',
-                            `✓ 검사가 완료되었습니다!<br>` +
-                            `발견된 오류: ${result.errors_found}개<br>` +
-                            `파일이 자동으로 다운로드되었습니다.<br>` +
-                            `<strong>${email}</strong>로도 이메일이 발송되었습니다.<br><br>` +
-                            `<strong style="color: #667eea;">💡 주석 확인 방법:</strong><br>` +
-                            `다운로드된 PDF 또는 이메일 첨부파일을 <strong>Adobe Acrobat</strong> 또는 주석 기능을 지원하는 PDF 뷰어로 열어주세요.<br>` +
-                            `틀린 부분이 색상별로 하이라이트되어 있으며, 클릭하면 자세한 설명을 볼 수 있습니다.`
-                        );
+                    // 성공 메시지
+                    const errorMessage = errorsCount === 0
+                        ? '✅ 맞춤법 오류가 발견되지 않았습니다!'
+                        : `✅ ${errorsCount}개의 맞춤법 오류를 발견했습니다!`;
 
-                        // 검사 결과 표시
-                        displayResults(result);
+                    showStatus('success',
+                        `${errorMessage}<br>PDF 파일이 다운로드되었습니다.<br><br>` +
+                        `<strong style="color: #667eea;">💡 주석 확인 방법:</strong><br>` +
+                        `다운로드된 PDF를 <strong>Adobe Acrobat</strong> 또는 주석 기능을 지원하는 PDF 뷰어로 열어주세요.<br>` +
+                        `틀린 부분이 색상별로 하이라이트되어 있으며, 클릭하면 자세한 설명을 볼 수 있습니다.`
+                    );
 
-                        // 폼 초기화는 하지 않음 (결과를 계속 볼 수 있도록)
-                    } else {
-                        showStatus('error', `✗ 오류 발생: ${result.message}`);
-                        submitBtn.disabled = false;
-                    }
+                    updateResultSummary(errorsCount);
+                    submitBtn.disabled = false;
                 } else {
                     const result = await response.json();
                     showStatus('error', `✗ 오류 발생: ${result.message}`);
@@ -910,24 +999,6 @@
                 step.innerHTML = step.innerHTML.replace('⏳', '✓').replace('⏸', '✓');
             });
             updateProgressBar(100);
-        }
-
-        // Base64를 Blob으로 변환
-        function base64ToBlob(base64, contentType) {
-            const byteCharacters = atob(base64);
-            const byteArrays = [];
-
-            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-                const slice = byteCharacters.slice(offset, offset + 512);
-                const byteNumbers = new Array(slice.length);
-                for (let i = 0; i < slice.length; i++) {
-                    byteNumbers[i] = slice.charCodeAt(i);
-                }
-                const byteArray = new Uint8Array(byteNumbers);
-                byteArrays.push(byteArray);
-            }
-
-            return new Blob(byteArrays, {type: contentType});
         }
 
         // 검사 결과 표시
@@ -1021,6 +1092,22 @@
         function toggleErrorCard(index) {
             const card = document.getElementById(`error-card-${index}`);
             card.classList.toggle('expanded');
+        }
+
+        function updateResultSummary(errorsCount) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            const statTotal = document.getElementById('statTotal');
+            const statHighlighted = document.getElementById('statHighlighted');
+            const statNotHighlightedContainer = document.getElementById('statNotHighlightedContainer');
+            const warningMessage = document.getElementById('warningMessage');
+            const errorsList = document.getElementById('errorsList');
+
+            statTotal.textContent = errorsCount;
+            statHighlighted.textContent = errorsCount;
+            statNotHighlightedContainer.style.display = 'none';
+            warningMessage.style.display = 'none';
+            errorsList.innerHTML = '';
+            resultsContainer.classList.add('active');
         }
 
         // HTML 이스케이프

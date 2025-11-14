@@ -71,6 +71,10 @@ RESEND_FROM_EMAIL=noreply@pdfgrammercheckorean.site
 # Flask 설정
 PORT=5000
 DEBUG=False
+
+# OCR 설정 (선택)
+USE_GOOGLE_VISION_OCR=True  # Google Vision OCR 사용 여부
+# GOOGLE_VISION_CREDENTIALS_JSON='{"type": "..."}'  # 또는 GOOGLE_APPLICATION_CREDENTIALS로 파일 경로 지정
 ```
 
 ### 3. 프론트엔드 실행
@@ -112,17 +116,12 @@ PDF 파일의 맞춤법을 검사합니다.
 ```
 multipart/form-data
 - pdf: PDF 파일 (최대 30MB)
-- email: 이메일 주소
+- email: 이메일 주소 (선택)
 ```
 
 **Response:**
-```json
-{
-  "status": "success",
-  "message": "이메일이 발송되었습니다",
-  "errors_found": 171
-}
-```
+- 성공 시: 주석이 포함된 PDF 파일이 직접 다운로드되며, `X-Errors-Found` 헤더로 오류 개수가 전달됩니다.
+- 실패 시: JSON 형식의 에러 메시지가 반환됩니다.
 
 ### POST `/api/survey`
 
@@ -142,6 +141,26 @@ multipart/form-data
 {
   "status": "success",
   "message": "설문조사가 제출되었습니다"
+}
+```
+
+### POST `/api/contact`
+
+문의 내용을 저장합니다.
+
+**Request:**
+```json
+{
+  "message": "서비스 관련 문의",
+  "email": "user@example.com"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "문의가 접수되었습니다"
 }
 ```
 
@@ -211,6 +230,15 @@ error = {'wrong': '되요', 'correct': '돼요', 'position': 42}
 timestamp,source,purpose,email
 2024-11-04T14:30:00,search,work,user@example.com
 ```
+
+### 4. 스캔 문서 OCR
+
+기본값으로 Google Cloud Vision Document OCR을 사용하여 스캔된 PDF를 처리합니다.
+
+- `.env`에 `USE_GOOGLE_VISION_OCR=True` (기본값)와 함께 서비스 계정 키를 제공하세요.
+- `GOOGLE_VISION_CREDENTIALS_JSON`에 JSON 문자열을 그대로 붙여넣거나, `GOOGLE_APPLICATION_CREDENTIALS`에 키 파일 경로를 지정하면 됩니다.
+- Vision API 호출에 실패하거나 비활성화된 경우 자동으로 pdfplumber 기반 텍스트 추출로 폴백합니다(좌표 정확도는 낮아집니다).
+- Vision API는 별도 과금 및 할당량이 있으므로 GCP 콘솔에서 사용량을 확인하세요.
 
 ## 🤝 기여하기
 

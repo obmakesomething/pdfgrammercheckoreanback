@@ -73,14 +73,8 @@ def check_pdf():
                 'message': 'PDF 파일이 없습니다'
             }), 400
 
-        if 'email' not in request.form:
-            return jsonify({
-                'status': 'error',
-                'message': '이메일 주소가 없습니다'
-            }), 400
-
         pdf_file = request.files['pdf']
-        email = request.form['email']
+        email = request.form.get('email', '').strip()
 
         # 파일명 검증
         if pdf_file.filename == '':
@@ -108,7 +102,10 @@ def check_pdf():
 
         print(f"\n{'=' * 60}")
         print(f"새로운 요청: {pdf_file.filename}")
-        print(f"이메일: {email}")
+        if email:
+            print(f"이메일: {email}")
+        else:
+            print("이메일: (입력되지 않음)")
         print(f"파일 크기: {file_size / 1024 / 1024:.2f} MB")
         print(f"{'=' * 60}")
 
@@ -124,47 +121,27 @@ def check_pdf():
         # 3. 맞춤법 검사 실행
         result = processor.process(input_pdf_path, output_pdf_path)
 
-        # 4. 이메일을 CSV에 저장
-        try:
-            csv_file = 'user_emails.csv'
-            file_exists = os.path.exists(csv_file)
-
-            with open(csv_file, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=['timestamp', 'email', 'filename', 'errors_found'])
-                if not file_exists:
-                    writer.writeheader()
-                writer.writerow({
-                    'timestamp': datetime.datetime.now().isoformat(),
-                    'email': email,
-                    'filename': pdf_file.filename,
-                    'errors_found': result['errors_found']
-                })
-            print(f"이메일 저장 완료: {email}")
-        except Exception as e:
-            print(f"이메일 저장 실패: {e}")
-
-        # 5. 이메일 발송 (백그라운드)
-        if result['success'] and result['errors_found'] > 0:
-            pdf_to_send = output_pdf_path
-
-            # 이메일 발송 시도 (실패해도 웹 응답은 정상 처리)
+        # 4. 이메일을 CSV에 저장 (입력 시)
+        if email:
             try:
-                print(f"\n이메일 발송 시도: {email}")
-                email_success = email_sender.send_grammar_check_result(
-                    to_email=email,
-                    pdf_path=pdf_to_send,
-                    errors_count=result['errors_found'],
-                    original_filename=pdf_file.filename
-                )
+                csv_file = 'user_emails.csv'
+                file_exists = os.path.exists(csv_file)
 
-                if email_success:
-                    print(f"✓ 이메일 발송 성공: {email}")
-                else:
-                    print(f"⚠ 이메일 발송 실패: {email} (웹 응답은 정상 처리)")
+                with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=['timestamp', 'email', 'filename', 'errors_found'])
+                    if not file_exists:
+                        writer.writeheader()
+                    writer.writerow({
+                        'timestamp': datetime.datetime.now().isoformat(),
+                        'email': email,
+                        'filename': pdf_file.filename,
+                        'errors_found': result['errors_found']
+                    })
+                print(f"이메일 저장 완료: {email}")
             except Exception as e:
-                print(f"⚠ 이메일 발송 오류: {e} (웹 응답은 정상 처리)")
+                print(f"이메일 저장 실패: {e}")
 
-        # 6. PDF 파일 반환 (다운로드)
+        # 5. PDF 파일 반환 (다운로드)
         if result['success']:
             # 오류가 있으면 수정된 PDF, 없으면 원본 PDF
             pdf_to_send = output_pdf_path if result['errors_found'] > 0 else input_pdf_path
@@ -354,6 +331,63 @@ def submit_feedback():
         return jsonify({
             'status': 'error',
             'message': '피드백 저장 중 오류가 발생했습니다'
+        }), 500
+
+
+@app.route('/api/contact', methods=['POST'])
+def submit_contact():
+    """
+    문의 저장 API
+
+    Request:
+        - application/json
+        - message: 문의 내용 (필수)
+        - email: 이메일 (선택)
+
+    Response:
+        {'status': 'success', 'message': '문의가 접수되었습니다'}
+    """
+    try:
+        data = request.get_json()
+
+        message = data.get('message')
+        email = data.get('email', '익명')
+
+        if not message or not message.strip():
+            return jsonify({
+                'status': 'error',
+                'message': '문의 내용을 입력해주세요'
+            }), 400
+
+        timestamp = datetime.datetime.now().isoformat()
+
+        contact_log = {
+            'timestamp': timestamp,
+            'email': email,
+            'message': message.strip()
+        }
+
+        print(f"\n[문의 접수] {contact_log}")
+
+        csv_file = 'contact_requests.csv'
+        file_exists = os.path.exists(csv_file)
+
+        with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['timestamp', 'email', 'message'])
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(contact_log)
+
+        return jsonify({
+            'status': 'success',
+            'message': '문의가 접수되었습니다'
+        }), 200
+
+    except Exception as e:
+        print(f"문의 저장 오류: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': '문의 저장 중 오류가 발생했습니다'
         }), 500
 
 

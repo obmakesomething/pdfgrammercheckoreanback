@@ -2,33 +2,33 @@
 # -*- coding: utf-8 -*-
 """
 PDF 텍스트 추출 모듈
-문자 단위로 위치 정보(페이지, x, y)를 함께 추출
+Google Vision OCR + pdfplumber fallback
 """
+import io
+import json
+import os
+
 import pypdfium2 as pdfium
+
+try:
+    from google.cloud import vision
+    from google.oauth2 import service_account
+    GOOGLE_VISION_AVAILABLE = True
+except ImportError:
+    vision = None
+    service_account = None
+    GOOGLE_VISION_AVAILABLE = False
 
 
 class PDFTextExtractor:
-    """PDF에서 텍스트와 위치 정보를 추출하는 클래스"""
+    """기본 PDF 텍스트 추출 (pypdfium2)"""
 
     def __init__(self, pdf_path):
-        """
-        Args:
-            pdf_path: PDF 파일 경로
-        """
         self.pdf_path = pdf_path
         self.pdf = None
 
     def extract_text_with_positions(self):
-        """
-        PDF에서 문자 단위로 텍스트와 위치 정보를 추출
-
-        Returns:
-            tuple: (text_with_positions, raw_text)
-                - text_with_positions: 각 문자의 위치 정보 리스트
-                - raw_text: 전체 텍스트 문자열
-        """
         try:
-            # PDF 문서 열기
             self.pdf = pdfium.PdfDocument(self.pdf_path)
             total_pages = len(self.pdf)
 
@@ -36,50 +36,27 @@ class PDFTextExtractor:
             raw_text_parts = []
             char_index = 0
 
-            # 각 페이지 순회
             for page_num in range(total_pages):
                 page = self.pdf[page_num]
                 textpage = page.get_textpage()
-
-                # 페이지의 전체 텍스트 가져오기
                 page_text = textpage.get_text_range()
 
-                # 문자 단위로 순회하면서 위치 정보 추출
-                for char_idx, char in enumerate(page_text):
+                for char in page_text:
                     char_info = {
                         'char': char,
-                        'page': page_num + 1,  # 1부터 시작
-                        'index': char_index
+                        'page': page_num + 1,
+                        'index': char_index,
+                        'x': None,
+                        'y': None
                     }
-
-                    # 좌표 정보 가져오기 (가능한 경우)
-                    try:
-                        # 문자의 바운딩 박스 가져오기
-                        # get_text_bounded는 특정 영역의 텍스트를 가져오는 메서드
-                        # 여기서는 단일 문자의 위치를 추정
-                        # 실제로는 textpage의 get_charbox 또는 유사 메서드 사용
-                        # pypdfium2의 버전에 따라 다를 수 있음
-
-                        # 간단한 방식: 페이지 높이와 너비 기준으로 추정
-                        # 실제 구현에서는 더 정확한 방법 필요
-                        char_info['x'] = None
-                        char_info['y'] = None
-
-                    except:
-                        char_info['x'] = None
-                        char_info['y'] = None
-
                     text_with_positions.append(char_info)
                     raw_text_parts.append(char)
                     char_index += 1
 
-                # 페이지 리소스 해제
                 textpage.close()
                 page.close()
 
-            # PDF 닫기
             self.pdf.close()
-
             raw_text = ''.join(raw_text_parts)
             return text_with_positions, raw_text
 
@@ -90,58 +67,36 @@ class PDFTextExtractor:
             raise
 
     def extract_text_simple(self):
-        """
-        간단한 텍스트 추출 (위치 정보 없이)
-
-        Returns:
-            str: 전체 텍스트
-        """
         try:
             pdf = pdfium.PdfDocument(self.pdf_path)
             text_parts = []
 
             for page in pdf:
                 textpage = page.get_textpage()
-                text = textpage.get_text_range()
-                text_parts.append(text)
+                text_parts.append(textpage.get_text_range())
                 textpage.close()
                 page.close()
 
             pdf.close()
             return '\n'.join(text_parts)
-
         except Exception as e:
             print(f"PDF 추출 오류: {e}")
             raise
 
 
-# 더 나은 방식: pdfplumber를 사용한 정확한 좌표 추출
 class SimplePDFExtractor:
-    """pdfplumber를 사용한 정확한 PDF 텍스트 및 좌표 추출"""
+    """pdfplumber 기반 텍스트 + 좌표 추출"""
 
     def __init__(self, pdf_path):
         self.pdf_path = pdf_path
 
     def extract_paragraphs_with_positions(self):
-        """
-        파라그래프 단위로 텍스트와 위치 정보 추출
-
-        Returns:
-            list: 파라그래프 정보 리스트
-                [
-                    {
-                        'text': '파라그래프 텍스트',
-                        'start_index': 시작 인덱스,
-                        'end_index': 끝 인덱스,
-                        'page': 시작 페이지
-                    },
-                    ...
-                ]
-        """
-        # 먼저 문자 단위로 추출
         text_with_positions, raw_text = self.extract_text_with_positions()
+        paragraphs = self._split_into_paragraphs(text_with_positions, raw_text)
+        return paragraphs, text_with_positions, raw_text
 
-        # 파라그래프 분리 (줄바꿈 2개 이상 또는 마침표+줄바꿈으로 구분)
+    @staticmethod
+    def _split_into_paragraphs(text_with_positions, raw_text):
         paragraphs = []
         current_para = []
         current_start = 0
@@ -149,12 +104,8 @@ class SimplePDFExtractor:
         for i, char in enumerate(raw_text):
             current_para.append(char)
 
-            # 파라그래프 구분 조건:
-            # 1. 연속된 줄바꿈 2개 이상
-            # 2. 300자 이상 && 마침표나 물음표, 느낌표 뒤 줄바꿈
             if i > 0:
-                # 줄바꿈 2개 이상
-                if char == '\n' and i > 0 and raw_text[i-1] == '\n':
+                if char == '\n' and raw_text[i-1] == '\n':
                     para_text = ''.join(current_para).strip()
                     if para_text:
                         paragraphs.append({
@@ -163,24 +114,20 @@ class SimplePDFExtractor:
                             'end_index': i,
                             'page': text_with_positions[current_start]['page'] if current_start < len(text_with_positions) else 1
                         })
-                        current_para = []
-                        current_start = i + 1
+                    current_para = []
+                    current_start = i + 1
+                elif len(current_para) >= 300 and char == '\n' and raw_text[i-1] in '.?!':
+                    para_text = ''.join(current_para).strip()
+                    if para_text:
+                        paragraphs.append({
+                            'text': para_text,
+                            'start_index': current_start,
+                            'end_index': i,
+                            'page': text_with_positions[current_start]['page'] if current_start < len(text_with_positions) else 1
+                        })
+                    current_para = []
+                    current_start = i + 1
 
-                # 300자 이상이고 문장 종결 후 줄바꿈
-                elif len(current_para) >= 300 and char == '\n':
-                    if i > 0 and raw_text[i-1] in '.?!':
-                        para_text = ''.join(current_para).strip()
-                        if para_text:
-                            paragraphs.append({
-                                'text': para_text,
-                                'start_index': current_start,
-                                'end_index': i,
-                                'page': text_with_positions[current_start]['page'] if current_start < len(text_with_positions) else 1
-                            })
-                            current_para = []
-                            current_start = i + 1
-
-        # 마지막 파라그래프
         if current_para:
             para_text = ''.join(current_para).strip()
             if para_text:
@@ -191,15 +138,9 @@ class SimplePDFExtractor:
                     'page': text_with_positions[current_start]['page'] if current_start < len(text_with_positions) else 1
                 })
 
-        return paragraphs, text_with_positions, raw_text
+        return paragraphs
 
     def extract_text_with_positions(self):
-        """
-        문자 단위로 텍스트와 정확한 위치 정보 추출 (pdfplumber 사용)
-
-        Returns:
-            tuple: (text_with_positions, raw_text)
-        """
         try:
             import pdfplumber
         except ImportError:
@@ -213,24 +154,18 @@ class SimplePDFExtractor:
         try:
             with pdfplumber.open(self.pdf_path) as pdf:
                 for page_num, page in enumerate(pdf.pages):
-                    # 문자 단위로 추출 (chars에 각 문자의 좌표 정보 포함)
                     chars = page.chars
+                    page_height = float(page.height)
 
                     for char_obj in chars:
                         char = char_obj['text']
-
-                        # pdfplumber 좌표계: 왼쪽 상단이 (0,0)
-                        # PDF 좌표계: 왼쪽 하단이 (0,0)이므로 변환 필요
-                        page_height = float(page.height)
-
                         char_info = {
                             'char': char,
                             'page': page_num + 1,
-                            'x': float(char_obj['x0']),  # 문자 왼쪽 x 좌표
-                            'y': page_height - float(char_obj['top']),  # PDF 좌표계로 변환
+                            'x': float(char_obj['x0']),
+                            'y': page_height - float(char_obj['top']),
                             'index': char_index
                         }
-
                         text_with_positions.append(char_info)
                         raw_text_parts.append(char)
                         char_index += 1
@@ -243,9 +178,6 @@ class SimplePDFExtractor:
             return self._extract_with_pypdf2()
 
     def _extract_with_pypdf2(self):
-        """
-        PyPDF2를 사용한 fallback 방식 (좌표 정보 없음)
-        """
         import PyPDF2
 
         text_with_positions = []
@@ -254,16 +186,13 @@ class SimplePDFExtractor:
 
         with open(self.pdf_path, 'rb') as file:
             reader = PyPDF2.PdfReader(file)
-
             for page_num, page in enumerate(reader.pages):
-                page_text = page.extract_text()
-
-                # 각 문자에 페이지 정보 추가
+                page_text = page.extract_text() or ''
                 for char in page_text:
                     char_info = {
                         'char': char,
                         'page': page_num + 1,
-                        'x': None,  # PyPDF2로는 정확한 좌표 추출 어려움
+                        'x': None,
                         'y': None,
                         'index': char_index
                     }
@@ -275,7 +204,150 @@ class SimplePDFExtractor:
         return text_with_positions, raw_text
 
 
-# 테스트
+class GoogleVisionExtractor(SimplePDFExtractor):
+    """Google Cloud Vision Document OCR"""
+
+    def __init__(self, pdf_path, scale=2.0):
+        super().__init__(pdf_path)
+        if not GOOGLE_VISION_AVAILABLE:
+            raise ImportError("google-cloud-vision 패키지가 설치되지 않았습니다")
+
+        self.scale = scale
+        self.client = self._create_client()
+
+    def _create_client(self):
+        cred_json = os.getenv('GOOGLE_VISION_CREDENTIALS_JSON')
+        cred_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        credentials = None
+
+        try:
+            if cred_json:
+                info = json.loads(cred_json)
+                credentials = service_account.Credentials.from_service_account_info(info)
+                print("Google Vision: 서비스 계정 JSON(환경 변수)으로 인증합니다.")
+            elif cred_path and os.path.exists(cred_path):
+                credentials = service_account.Credentials.from_service_account_file(cred_path)
+                print(f"Google Vision: 서비스 계정 파일({cred_path})로 인증합니다.")
+            else:
+                print("Google Vision: 별도 자격 증명 없이 기본 ADC를 사용합니다.")
+        except Exception as cred_error:
+            print(f"Google Vision 자격 증명 로딩 실패: {cred_error}")
+
+        if credentials:
+            return vision.ImageAnnotatorClient(credentials=credentials)
+        return vision.ImageAnnotatorClient()
+
+    def extract_text_with_positions(self):
+        pdf = pdfium.PdfDocument(self.pdf_path)
+
+        text_with_positions = []
+        raw_text_parts = []
+        char_index = 0
+
+        for page_num in range(len(pdf)):
+            page = pdf[page_num]
+            bitmap = page.render(scale=self.scale)
+            pil_image = bitmap.to_pil()
+
+            image_bytes = io.BytesIO()
+            pil_image.save(image_bytes, format='PNG')
+            image_content = image_bytes.getvalue()
+
+            bitmap.close()
+            page.close()
+
+            image = vision.Image(content=image_content)
+            response = self.client.document_text_detection(image=image)
+
+            if response.error.message:
+                raise RuntimeError(f"Vision API 오류: {response.error.message}")
+
+            annotations = response.full_text_annotation
+            if not annotations or not annotations.pages:
+                continue
+
+            for annotation_page in annotations.pages:
+                for block in annotation_page.blocks:
+                    for paragraph in block.paragraphs:
+                        for word in paragraph.words:
+                            for symbol in word.symbols:
+                                char = symbol.text or ''
+                                if not char:
+                                    continue
+
+                                x, y = self._get_symbol_center(symbol)
+                                char_info = {
+                                    'char': char,
+                                    'page': page_num + 1,
+                                    'x': x,
+                                    'y': y,
+                                    'index': char_index
+                                }
+                                text_with_positions.append(char_info)
+                                raw_text_parts.append(char)
+                                char_index += 1
+
+                                break_type = None
+                                if symbol.property and symbol.property.detected_break:
+                                    break_type = symbol.property.detected_break.type_
+
+                                if break_type in (
+                                    vision.TextAnnotation.DetectedBreak.Type.SPACE,
+                                    vision.TextAnnotation.DetectedBreak.Type.EOL_SURE_SPACE
+                                ):
+                                    text_with_positions.append({
+                                        'char': ' ',
+                                        'page': page_num + 1,
+                                        'x': None,
+                                        'y': None,
+                                        'index': char_index
+                                    })
+                                    raw_text_parts.append(' ')
+                                    char_index += 1
+                                elif break_type == vision.TextAnnotation.DetectedBreak.Type.LINE_BREAK:
+                                    text_with_positions.append({
+                                        'char': '\n',
+                                        'page': page_num + 1,
+                                        'x': None,
+                                        'y': None,
+                                        'index': char_index
+                                    })
+                                    raw_text_parts.append('\n')
+                                    char_index += 1
+
+            text_with_positions.append({
+                'char': '\n',
+                'page': page_num + 1,
+                'x': None,
+                'y': None,
+                'index': char_index
+            })
+            raw_text_parts.append('\n')
+            char_index += 1
+
+        pdf.close()
+        raw_text = ''.join(raw_text_parts)
+        return text_with_positions, raw_text
+
+    def extract_paragraphs_with_positions(self):
+        text_with_positions, raw_text = self.extract_text_with_positions()
+        paragraphs = self._split_into_paragraphs(text_with_positions, raw_text)
+        return paragraphs, text_with_positions, raw_text
+
+    @staticmethod
+    def _get_symbol_center(symbol):
+        if not symbol.bounding_box or not symbol.bounding_box.vertices:
+            return None, None
+
+        xs = [v.x for v in symbol.bounding_box.vertices if v.x is not None]
+        ys = [v.y for v in symbol.bounding_box.vertices if v.y is not None]
+
+        if not xs or not ys:
+            return None, None
+
+        return sum(xs) / len(xs), sum(ys) / len(ys)
+
+
 if __name__ == "__main__":
     import sys
 
@@ -285,23 +357,18 @@ if __name__ == "__main__":
 
     pdf_path = sys.argv[1]
 
-    print("=" * 60)
-    print("PDF 텍스트 추출 테스트")
-    print("=" * 60)
-    print(f"파일: {pdf_path}\n")
-
     try:
-        # SimplePDFExtractor 사용
-        extractor = SimplePDFExtractor(pdf_path)
-        text_with_positions, raw_text = extractor.extract_text_with_positions()
+        if GOOGLE_VISION_AVAILABLE and os.getenv('USE_GOOGLE_VISION_OCR', 'true').lower() == 'true':
+            extractor = GoogleVisionExtractor(pdf_path)
+            print("Google Vision OCR로 텍스트를 추출합니다")
+        else:
+            extractor = SimplePDFExtractor(pdf_path)
+            print("pdfplumber 기반 텍스트를 추출합니다")
 
+        paragraphs, text_with_positions, raw_text = extractor.extract_paragraphs_with_positions()
         print(f"총 문자 수: {len(text_with_positions)}")
         print(f"총 텍스트 길이: {len(raw_text)}")
-        print(f"\n처음 500자:\n{raw_text[:500]}")
-        print(f"\n처음 10개 문자 정보:")
-        for i, char_info in enumerate(text_with_positions[:10]):
-            print(f"  [{i}] '{char_info['char']}' - 페이지: {char_info['page']}")
-
+        print(f"파라그래프 수: {len(paragraphs)}")
     except Exception as e:
         print(f"오류: {e}")
         sys.exit(1)

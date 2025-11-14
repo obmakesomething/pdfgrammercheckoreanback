@@ -6,7 +6,11 @@ PDF 파일을 받아 전체 맞춤법 검사 파이프라인 실행
 """
 import os
 import tempfile
-from pdf_extractor import SimplePDFExtractor
+from pdf_extractor import (
+    SimplePDFExtractor,
+    GoogleVisionExtractor,
+    GOOGLE_VISION_AVAILABLE,
+)
 from text_preprocessor import TextPreprocessor
 from spell_checker import SpellChecker
 from pdf_annotator import PDFAnnotator
@@ -17,6 +21,9 @@ except ImportError:
     from pdf_highlighter import PDFHighlighter
     FITZ_AVAILABLE = False
     print("경고: PyMuPDF가 없습니다. pdfplumber 버전 사용")
+
+
+USE_GOOGLE_VISION_OCR = os.getenv('USE_GOOGLE_VISION_OCR', 'true').lower() == 'true'
 
 
 class GrammarCheckProcessor:
@@ -49,7 +56,17 @@ class GrammarCheckProcessor:
         try:
             # 1단계: PDF 텍스트 추출 (파라그래프 단위)
             print("\n[1/5] PDF 텍스트 추출 중 (파라그래프 단위)...")
-            extractor = SimplePDFExtractor(input_pdf_path)
+            extractor = None
+            if USE_GOOGLE_VISION_OCR and GOOGLE_VISION_AVAILABLE:
+                try:
+                    print("  ➤ Google Cloud Vision API 기반 텍스트 추출을 사용합니다")
+                    extractor = GoogleVisionExtractor(input_pdf_path)
+                except Exception as vision_error:
+                    print(f"  ⚠ Google Vision 초기화 오류: {vision_error}. pdfplumber 방식으로 대체합니다")
+
+            if extractor is None:
+                extractor = SimplePDFExtractor(input_pdf_path)
+                print("  ➤ pdfplumber 기반 텍스트 추출을 사용합니다")
             paragraphs, text_with_positions, raw_text = extractor.extract_paragraphs_with_positions()
             print(f"  ✓ 총 {len(text_with_positions)}자 추출 완료")
             print(f"  ✓ 파라그래프 개수: {len(paragraphs)}개")

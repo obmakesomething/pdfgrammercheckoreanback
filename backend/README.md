@@ -68,7 +68,17 @@ PORT=5000
 DEBUG=False
 RESEND_API_KEY=re_your_api_key_here
 RESEND_FROM_EMAIL=noreply@pdfgrammercheckorean.site
+USE_GOOGLE_VISION_OCR=False
+# GOOGLE_VISION_CREDENTIALS_JSON={"type":"service_account",...}
+# GOOGLE_APPLICATION_CREDENTIALS=/path/to/vision.json
 ```
+
+### Google Cloud Vision 연동
+
+- `USE_GOOGLE_VISION_OCR=True`(기본값)일 때 Google Vision Document Text Detection을 사용해 스캔 PDF를 처리합니다.
+- 자격 증명은 `GOOGLE_VISION_CREDENTIALS_JSON`(JSON 문자열) 또는 `GOOGLE_APPLICATION_CREDENTIALS`(키 파일 경로)로 제공하세요.
+- Vision API 호출이 실패하거나 비활성화된 경우 자동으로 pdfplumber 기반 추출로 폴백합니다.
+- Vision API는 별도 과금/쿼터가 있으므로 GCP 콘솔에서 사용량을 확인하세요.
 
 ## 실행
 
@@ -91,18 +101,12 @@ gunicorn -w 4 -b 0.0.0.0:5000 app:app
 ```bash
 curl -X POST http://localhost:5000/api/check-pdf \
   -F "pdf=@test.pdf" \
-  -F "email=user@example.com"
+  -F "email=user@example.com"  # (선택)
 ```
 
 **응답 (성공):**
 
-```json
-{
-  "status": "success",
-  "message": "이메일이 발송되었습니다",
-  "errors_found": 15
-}
-```
+주석이 적용된 PDF가 다운로드되며, 응답 헤더 `X-Errors-Found`를 통해 발견된 오류 개수를 확인할 수 있습니다.
 
 **응답 (오류):**
 
@@ -125,6 +129,23 @@ curl http://localhost:5000/health
 {
   "status": "healthy",
   "service": "PDF Grammar Checker"
+}
+```
+
+### 3. 문의 접수
+
+```bash
+curl -X POST http://localhost:5000/api/contact \
+  -H "Content-Type: application/json" \
+  -d '{"message": "서비스 문의", "email": "user@example.com"}'
+```
+
+**응답:**
+
+```json
+{
+  "status": "success",
+  "message": "문의가 접수되었습니다"
 }
 ```
 
