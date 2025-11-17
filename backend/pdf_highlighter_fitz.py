@@ -2,16 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 PyMuPDF (fitz)를 사용한 정확한 PDF 하이라이트 모듈
-텍스트 검색 기능을 사용하여 정확한 위치에 하이라이트 추가
+텍스트 검색 또는 전달받은 좌표를 사용하여 하이라이트 추가
 """
 import fitz  # PyMuPDF
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 
 class PDFHighlighterFitz:
     """PyMuPDF를 사용하여 정확한 하이라이트를 추가하는 클래스"""
 
-    # 카테고리별 색상 정의 (RGB, 0-1 범위)
     COLORS = {
         'SPACING': [0, 0.5, 1],      # 파란색 - 띄어쓰기
         'SPELL': [1, 0, 0],          # 빨간색 - 맞춤법
@@ -24,125 +23,57 @@ class PDFHighlighterFitz:
         self.input_pdf_path = input_pdf_path
         self.output_pdf_path = output_pdf_path
 
-    def add_highlights(self, errors: List[Dict]):
+    def add_highlights(self, annotations: List[Dict], text_positions: List[Dict] = None):
         """
-        틀린 단어를 PDF에서 찾아 카테고리별 색상으로 하이라이트 추가
-
-        Args:
-            errors: 오류 정보 리스트
-                [
-                    {
-                        'wrong': '틀린 단어',
-                        'correct': '올바른 단어',
-                        'help': '설명',
-                        'category': 'SPACING' | 'SPELL' | 'GRAMMAR' 등
-                    },
-                    ...
-                ]
+        전달받은 주석 정보를 기반으로 PDF에 하이라이트 추가
         """
         try:
-            # PDF 열기
             doc = fitz.open(self.input_pdf_path)
             total_highlights = 0
-            used_texts = set()  # 이미 하이라이트한 텍스트 추적 (중복 방지)
+            used_texts = set()
 
-            # 각 오류에 대해
-            for error in errors:
-                wrong_word = error['wrong'].strip()
-                category = error.get('category', 'default')
-
-                # 이미 처리한 텍스트는 건너뛰기 (중복 방지)
-                if wrong_word in used_texts:
-                    continue
-
-                # 카테고리별 색상 선택
+            for annotation in annotations:
+                wrong_word = (annotation.get('wrong') or '').strip()
+                category = annotation.get('category', 'default')
                 color = self.COLORS.get(category, self.COLORS['default'])
 
-                # 모든 페이지에서 검색
-                found = False
-                for page_num in range(len(doc)):
-                    if found:
-                        break
+                page_index = max(0, int(annotation.get('page', 1)) - 1)
+                if page_index >= len(doc):
+                    continue
 
-                    page = doc[page_num]
+                page = doc[page_index]
+                rect = self._rect_from_annotation(page, annotation)
 
-                    # 텍스트 검색 (정확한 위치 반환)
-                    text_instances = page.search_for(wrong_word)
+                if rect is None and wrong_word:
+                    key = (page_index, wrong_word)
+                    if key in used_texts:
+                        continue
+                    rect = self._search_rect(page, wrong_word)
+                    used_texts.add(key)
 
-                    # 첫 번째 일치 항목만 하이라이트
-                    if text_instances:
-                        inst = text_instances[0]
+                if rect is None:
+                    continue
 
-                        # 텍스트의 실제 바운딩 박스를 구하기 위해 글자별 위치 확인
-                        # inst는 Rect(x0, y0, x1, y1) 형태
-                        # 패딩을 크게 줄여서 텍스트에 딱 맞게 조정
-                        padding = 3
+                highlight = page.add_highlight_annot(rect)
+                highlight.set_colors(stroke=color)
+                highlight.set_info(
+                    title=f"맞춤법 검사기",
+                    content=f"틀림: {annotation.get('wrong', '')}\n"
+                            f"올바름: {annotation.get('correct', '')}\n\n"
+                            f"{annotation.get('help', '')}"
+                )
+                highlight.update()
+                total_highlights += 1
 
-                        # 패딩 적용 후 유효성 검증
-                        y0_adjusted = inst.y0 + padding
-                        y1_adjusted = inst.y1 - padding
+            if text_positions:
+                self._write_text_layer(doc, text_positions)
 
-                        # 사각형이 너무 작아지는 것 방지 (최소 높이 1픽셀)
-                        if y1_adjusted <= y0_adjusted:
-                            # 패딩 없이 원본 사용
-                            y0_adjusted = inst.y0
-                            y1_adjusted = inst.y1
-
-                        # 좌표 유효성 검증 (NaN, 무한대 체크)
-                        try:
-                            adjusted_rect = fitz.Rect(
-                                inst.x0,
-                                y0_adjusted,
-                                inst.x1,
-                                y1_adjusted
-                            )
-
-                            # 페이지 경계 내에 있는지 확인
-                            page_rect = page.rect
-                            if not (adjusted_rect.x0 >= 0 and adjusted_rect.x1 <= page_rect.width and
-                                    adjusted_rect.y0 >= 0 and adjusted_rect.y1 <= page_rect.height and
-                                    adjusted_rect.is_valid):
-                                # 페이지 경계 내로 클리핑
-                                adjusted_rect = adjusted_rect & page_rect
-
-                            # 여전히 유효하지 않으면 건너뛰기
-                            if not adjusted_rect.is_valid or adjusted_rect.is_empty:
-                                print(f"  경고: '{wrong_word}' 하이라이트 건너뜀 (유효하지 않은 좌표)")
-                                continue
-
-                        except (ValueError, RuntimeError) as e:
-                            print(f"  경고: '{wrong_word}' 하이라이트 건너뜀 (좌표 오류: {e})")
-                            continue
-
-                        # 하이라이트 추가 (조정된 사각형 사용)
-                        highlight = page.add_highlight_annot(adjusted_rect)
-                        highlight.set_colors(stroke=color)
-
-                        # 주석 내용 추가
-                        category_name = {
-                            'SPACING': '띄어쓰기',
-                            'SPELL': '맞춤법',
-                            'GRAMMAR': '문법',
-                            'TYPO': '오타'
-                        }.get(category, '기타')
-
-                        highlight.set_info(
-                            title=f"맞춤법 검사기 ({category_name})",
-                            content=f"틀림: {error['wrong']}\n올바름: {error['correct']}\n\n{error.get('help', '')}"
-                        )
-                        highlight.update()
-
-                        used_texts.add(wrong_word)
-                        total_highlights += 1
-                        found = True
-
-            # PDF 저장
             doc.save(self.output_pdf_path)
             doc.close()
 
             print(f"✓ PDF 하이라이트 완료: {self.output_pdf_path}")
-            print(f"  입력 오류: {len(errors)}개")
-            print(f"  추가된 하이라이트: {total_highlights}개 (중복 제거)")
+            print(f"  입력 오류: {len(annotations)}개")
+            print(f"  추가된 하이라이트: {total_highlights}개")
 
         except Exception as e:
             print(f"PDF 하이라이트 오류: {e}")
@@ -150,8 +81,153 @@ class PDFHighlighterFitz:
             traceback.print_exc()
             raise
 
+    @staticmethod
+    def _rect_from_annotation(page, annotation) -> Optional[fitz.Rect]:
+        bbox = annotation.get('bbox')
+        if bbox and len(bbox) == 4:
+            x0, y0, x1, y1 = bbox
+            height = page.rect.height
+            rect = fitz.Rect(
+                x0,
+                height - y1,
+                x1,
+                height - y0
+            ) & page.rect
+            if rect.is_valid and not rect.is_empty:
+                return rect
 
-# 테스트
+        x = annotation.get('x')
+        y = annotation.get('y')
+        if x is None or y is None:
+            return None
+
+        padding = 8
+        height = page.rect.height
+        rect = fitz.Rect(
+            x - padding,
+            height - (y + padding),
+            x + padding,
+            height - (y - padding)
+        ) & page.rect
+        if rect.is_empty or not rect.is_valid:
+            return None
+        return rect
+
+    @staticmethod
+    def _search_rect(page, text: str) -> Optional[fitz.Rect]:
+        matches = page.search_for(text)
+        if not matches:
+            return None
+        return matches[0]
+
+    def _write_text_layer(self, doc: fitz.Document, text_positions: List[Dict]):
+        by_page: Dict[int, List[Dict]] = {}
+        for info in text_positions:
+            if not info.get('bbox'):
+                continue
+            page = info.get('page')
+            if page is None:
+                continue
+            by_page.setdefault(int(page), []).append(info)
+
+        for page_index in range(len(doc)):
+            page_number = page_index + 1
+            chars = by_page.get(page_number)
+            if not chars:
+                continue
+
+            page = doc[page_index]
+            lines = self._build_lines(chars)
+            for line_text, bbox in lines:
+                if not line_text.strip():
+                    continue
+                x0, y0, x1, y1 = bbox
+                page_height = page.rect.height
+                rect = fitz.Rect(
+                    x0,
+                    page_height - y1,
+                    x1,
+                    page_height - y0
+                ) & page.rect
+                if rect.is_empty or not rect.is_valid:
+                    continue
+                font_size = max(6, min(18, rect.height))
+                try:
+                    page.insert_textbox(
+                        rect,
+                        line_text,
+                        fontname="helv",
+                        fontsize=font_size,
+                        color=(0, 0, 0),
+                        overlay=True,
+                        opacity=0
+                    )
+                except Exception:
+                    continue
+
+    @staticmethod
+    def _build_lines(chars: List[Dict], line_threshold: float = 6.0):
+        sorted_chars = sorted(
+            chars,
+            key=lambda c: (
+                -((c['bbox'][1] + c['bbox'][3]) / 2),
+                c['bbox'][0]
+            )
+        )
+
+        lines = []
+        current_boxes = []
+        current_text = []
+        prev_center = None
+
+        def flush():
+            nonlocal current_boxes, current_text
+            if not current_boxes:
+                current_text = []
+                return None
+            text = ''.join(current_text)
+            x0 = min(box[0] for box in current_boxes)
+            y0 = min(box[1] for box in current_boxes)
+            x1 = max(box[2] for box in current_boxes)
+            y1 = max(box[3] for box in current_boxes)
+            bbox = [x0, y0, x1, y1]
+            result = (text, bbox)
+            current_boxes = []
+            current_text = []
+            return result
+
+        for info in sorted_chars:
+            char = info.get('char', '')
+            bbox = info.get('bbox')
+            if char == '\n':
+                res = flush()
+                if res:
+                    lines.append(res)
+                prev_center = None
+                continue
+
+            if bbox:
+                center = (bbox[1] + bbox[3]) / 2
+                if prev_center is None or abs(center - prev_center) <= line_threshold:
+                    current_boxes.append(bbox)
+                    current_text.append(char)
+                else:
+                    res = flush()
+                    if res:
+                        lines.append(res)
+                    current_boxes.append(bbox)
+                    current_text.append(char)
+                prev_center = center
+            else:
+                current_text.append(char)
+
+        res = flush()
+        if res:
+            lines.append(res)
+
+        return lines
+
+
 if __name__ == "__main__":
     import sys
 
@@ -162,28 +238,13 @@ if __name__ == "__main__":
     input_pdf = sys.argv[1]
     output_pdf = sys.argv[2]
 
-    # 테스트 오류
-    test_errors = [
-        {
-            'wrong': '되요',
-            'correct': '돼요',
-            'help': "'되다'의 활용형은 '돼요'입니다"
-        },
-        {
-            'wrong': '안되는',
-            'correct': '안 되는',
-            'help': "'안 되다'는 띄어 씁니다"
-        }
-    ]
-
-    print("=" * 60)
-    print("PDF 하이라이트 테스트 (PyMuPDF)")
-    print("=" * 60)
-    print(f"입력: {input_pdf}")
-    print(f"출력: {output_pdf}")
-    print(f"오류 개수: {len(test_errors)}개\n")
+    sample = [{
+        'wrong': '되요',
+        'correct': '돼요',
+        'help': "'되다'의 활용형은 '돼요'입니다",
+        'page': 1,
+        'bbox': [100, 100, 150, 120]
+    }]
 
     highlighter = PDFHighlighterFitz(input_pdf, output_pdf)
-    highlighter.add_highlights(test_errors)
-
-    print("\n완료!")
+    highlighter.add_highlights(sample)

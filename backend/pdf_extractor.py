@@ -159,12 +159,20 @@ class SimplePDFExtractor:
 
                     for char_obj in chars:
                         char = char_obj['text']
+                        x0 = float(char_obj['x0'])
+                        x1 = float(char_obj['x1'])
+                        top = float(char_obj['top'])
+                        bottom = float(char_obj['bottom'])
+                        y0 = page_height - bottom
+                        y1 = page_height - top
+
                         char_info = {
                             'char': char,
                             'page': page_num + 1,
-                            'x': float(char_obj['x0']),
-                            'y': page_height - float(char_obj['top']),
-                            'index': char_index
+                            'x': x0,
+                            'y': y0,
+                            'index': char_index,
+                            'bbox': [x0, y0, x1, y1]
                         }
                         text_with_positions.append(char_info)
                         raw_text_parts.append(char)
@@ -194,7 +202,8 @@ class SimplePDFExtractor:
                         'page': page_num + 1,
                         'x': None,
                         'y': None,
-                        'index': char_index
+                        'index': char_index,
+                        'bbox': None
                     }
                     text_with_positions.append(char_info)
                     raw_text_parts.append(char)
@@ -214,6 +223,7 @@ class GoogleVisionExtractor(SimplePDFExtractor):
 
         self.scale = scale
         self.client = self._create_client()
+        self.break_constants = self._resolve_break_constants()
 
     def _create_client(self):
         cred_json = os.getenv('GOOGLE_VISION_CREDENTIALS_JSON')
@@ -246,8 +256,12 @@ class GoogleVisionExtractor(SimplePDFExtractor):
 
         for page_num in range(len(pdf)):
             page = pdf[page_num]
+            page_width = float(page.get_width())
+            page_height = float(page.get_height())
             bitmap = page.render(scale=self.scale)
             pil_image = bitmap.to_pil()
+            img_width = pil_image.width
+            img_height = pil_image.height
 
             image_bytes = io.BytesIO()
             pil_image.save(image_bytes, format='PNG')
@@ -275,42 +289,47 @@ class GoogleVisionExtractor(SimplePDFExtractor):
                                 if not char:
                                     continue
 
-                                x, y = self._get_symbol_center(symbol)
+                                converted_bbox = self._convert_bbox_to_pdf(
+                                    symbol.bounding_box,
+                                    page_width,
+                                    page_height,
+                                    img_width,
+                                    img_height
+                                )
+                                x, y = self._get_symbol_center(converted_bbox)
                                 char_info = {
                                     'char': char,
                                     'page': page_num + 1,
                                     'x': x,
                                     'y': y,
-                                    'index': char_index
+                                    'index': char_index,
+                                    'bbox': converted_bbox
                                 }
                                 text_with_positions.append(char_info)
                                 raw_text_parts.append(char)
                                 char_index += 1
 
-                                break_type = None
-                                if symbol.property and symbol.property.detected_break:
-                                    break_type = symbol.property.detected_break.type_
+                                break_type = self._get_detected_break(symbol)
 
-                                if break_type in (
-                                    vision.TextAnnotation.DetectedBreak.Type.SPACE,
-                                    vision.TextAnnotation.DetectedBreak.Type.EOL_SURE_SPACE
-                                ):
+                                if break_type in self.break_constants['space_breaks']:
                                     text_with_positions.append({
                                         'char': ' ',
                                         'page': page_num + 1,
                                         'x': None,
                                         'y': None,
-                                        'index': char_index
+                                        'index': char_index,
+                                        'bbox': None
                                     })
                                     raw_text_parts.append(' ')
                                     char_index += 1
-                                elif break_type == vision.TextAnnotation.DetectedBreak.Type.LINE_BREAK:
+                                elif break_type == self.break_constants['line_break']:
                                     text_with_positions.append({
                                         'char': '\n',
                                         'page': page_num + 1,
                                         'x': None,
                                         'y': None,
-                                        'index': char_index
+                                        'index': char_index,
+                                        'bbox': None
                                     })
                                     raw_text_parts.append('\n')
                                     char_index += 1
@@ -320,7 +339,8 @@ class GoogleVisionExtractor(SimplePDFExtractor):
                 'page': page_num + 1,
                 'x': None,
                 'y': None,
-                'index': char_index
+                'index': char_index,
+                'bbox': None
             })
             raw_text_parts.append('\n')
             char_index += 1
@@ -334,18 +354,68 @@ class GoogleVisionExtractor(SimplePDFExtractor):
         paragraphs = self._split_into_paragraphs(text_with_positions, raw_text)
         return paragraphs, text_with_positions, raw_text
 
-    @staticmethod
-    def _get_symbol_center(symbol):
-        if not symbol.bounding_box or not symbol.bounding_box.vertices:
-            return None, None
+    def _convert_bbox_to_pdf(self, bounding_box, page_width, page_height, img_width, img_height):
+        if not bounding_box or not bounding_box.vertices:
+            return None
 
-        xs = [v.x for v in symbol.bounding_box.vertices if v.x is not None]
-        ys = [v.y for v in symbol.bounding_box.vertices if v.y is not None]
+        xs = []
+        ys = []
+
+        for vertex in bounding_box.vertices:
+            if vertex.x is None or vertex.y is None:
+                continue
+            x_ratio = float(vertex.x) / max(1.0, img_width)
+            y_ratio = float(vertex.y) / max(1.0, img_height)
+            x_pdf = x_ratio * page_width
+            y_pdf = page_height - (y_ratio * page_height)
+            xs.append(x_pdf)
+            ys.append(y_pdf)
 
         if not xs or not ys:
-            return None, None
+            return None
 
-        return sum(xs) / len(xs), sum(ys) / len(ys)
+        return [min(xs), min(ys), max(xs), max(ys)]
+
+    @staticmethod
+    def _get_symbol_center(bbox):
+        if not bbox:
+            return None, None
+        x0, y0, x1, y1 = bbox
+        return (x0 + x1) / 2, (y0 + y1) / 2
+
+    def _resolve_break_constants(self):
+        """Resolve enum values across google-cloud-vision versions."""
+        detected_break_cls = getattr(vision.TextAnnotation.DetectedBreak, "BreakType", None)
+        if detected_break_cls is None:
+            detected_break_cls = getattr(vision.TextAnnotation.DetectedBreak, "Type", None)
+
+        if detected_break_cls is None:
+            # Fallback to literal values from API docs
+            return {
+                'space_breaks': {1, 2, 3},
+                'line_break': 5,
+            }
+
+        space_values = set()
+        for attr in ("SPACE", "EOL_SURE_SPACE", "SURE_SPACE"):
+            value = getattr(detected_break_cls, attr, None)
+            if value is not None:
+                space_values.add(value)
+
+        line_break_value = getattr(detected_break_cls, "LINE_BREAK", None)
+        return {
+            'space_breaks': space_values or {1, 2, 3},
+            'line_break': line_break_value if line_break_value is not None else 5,
+        }
+
+    @staticmethod
+    def _get_detected_break(symbol):
+        if not symbol.property or not symbol.property.detected_break:
+            return None
+        detected_break = symbol.property.detected_break
+        if hasattr(detected_break, "type_"):
+            return detected_break.type_
+        return getattr(detected_break, "type", None)
 
 
 if __name__ == "__main__":

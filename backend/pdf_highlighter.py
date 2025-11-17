@@ -17,24 +17,18 @@ class PDFHighlighter:
         self.input_pdf_path = input_pdf_path
         self.output_pdf_path = output_pdf_path
 
-    def add_highlights(self, errors: List[Dict]):
+    def add_highlights(self, annotations: List[Dict], text_positions: List[Dict] = None):
         """
         틀린 단어를 PDF에서 찾아 하이라이트 추가
 
         Args:
-            errors: 오류 정보 리스트
-                [
-                    {
-                        'wrong': '틀린 단어',
-                        'correct': '올바른 단어',
-                        'help': '설명'
-                    },
-                    ...
-                ]
+            annotations: 오류 정보 리스트
         """
         try:
-            # 1. pdfplumber로 각 오류 단어의 위치 찾기
-            annotations_by_page = self._find_word_positions(errors)
+            # 1. 좌표 기반 주석이 있으면 그대로 사용, 없으면 검색
+            annotations_by_page = self._prepare_annotations(annotations)
+            if annotations_by_page is None:
+                annotations_by_page = self._find_word_positions(annotations)
 
             # 2. PyPDF2로 주석 추가
             self._add_annotations_to_pdf(annotations_by_page)
@@ -42,11 +36,33 @@ class PDFHighlighter:
             total_annotations = sum(len(anns) for anns in annotations_by_page.values())
             print(f"✓ PDF 하이라이트 완료: {self.output_pdf_path}")
             print(f"  총 {total_annotations}개의 하이라이트 추가")
-            print(f"  입력 오류: {len(errors)}개, 실제 하이라이트: {total_annotations}개")
+            print(f"  입력 오류: {len(annotations)}개, 실제 하이라이트: {total_annotations}개")
 
         except Exception as e:
             print(f"PDF 하이라이트 오류: {e}")
             raise
+
+    def _prepare_annotations(self, annotations: List[Dict]):
+        ready = {}
+        count = 0
+        for ann in annotations:
+            bbox = ann.get('bbox')
+            page = ann.get('page')
+            if not bbox or page is None:
+                return None
+
+            page_idx = int(page) - 1
+            ready.setdefault(page_idx, []).append({
+                'wrong': ann.get('wrong'),
+                'correct': ann.get('correct'),
+                'help': ann.get('help', ''),
+                'bbox': bbox
+            })
+            count += 1
+
+        if count == 0:
+            return None
+        return ready
 
     def _find_word_positions(self, errors: List[Dict]) -> Dict[int, List[Dict]]:
         """
