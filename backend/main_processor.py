@@ -49,6 +49,7 @@ USE_GOOGLE_VISION_OCR = os.getenv('USE_GOOGLE_VISION_OCR', 'true').lower() == 't
 FORCE_GOOGLE_VISION_OCR = os.getenv('FORCE_GOOGLE_VISION_OCR', 'false').lower() == 'true'
 OCR_MIN_TEXT_LENGTH = int(os.getenv('OCR_MIN_TEXT_LENGTH', '200'))
 OCR_EXCEPTION_TEXT_LENGTH = int(os.getenv('OCR_EXCEPTION_TEXT_LENGTH', '100'))
+MAX_FREE_CHARS = int(os.getenv('MAX_FREE_CHARS', '50000'))
 
 
 class GrammarCheckProcessor:
@@ -61,6 +62,7 @@ class GrammarCheckProcessor:
         self.force_google_vision = FORCE_GOOGLE_VISION_OCR
         self.ocr_min_text_length = max(1, OCR_MIN_TEXT_LENGTH)
         self.ocr_exception_text_length = max(1, OCR_EXCEPTION_TEXT_LENGTH)
+        self.max_free_chars = max(1, MAX_FREE_CHARS)
         self.snapshot_dir = os.path.join(LOG_DIR, 'snapshots')
         os.makedirs(self.snapshot_dir, exist_ok=True)
 
@@ -119,6 +121,25 @@ class GrammarCheckProcessor:
             if preview:
                 print(f"  ✓ 텍스트 미리보기: {preview}...")
                 self.logger.info("텍스트 샘플: %s", preview)
+
+            if text_stats['non_whitespace_chars'] > self.max_free_chars:
+                over = text_stats['non_whitespace_chars']
+                print(
+                    f"  ⚠ 글자 수 {over}자가 무료 한도({self.max_free_chars}자)를 초과했습니다."
+                )
+                self.logger.info(
+                    "무료 한도 초과: chars=%d limit=%d path=%s",
+                    over,
+                    self.max_free_chars,
+                    input_pdf_path
+                )
+                return {
+                    'success': False,
+                    'payment_required': True,
+                    'chars': over,
+                    'limit': self.max_free_chars,
+                    'message': f"무료 한도({self.max_free_chars}자)를 초과했습니다. 결제가 필요합니다."
+                }
 
             if text_stats['non_whitespace_chars'] < self.ocr_exception_text_length:
                 print(

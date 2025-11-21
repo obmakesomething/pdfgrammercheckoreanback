@@ -121,6 +121,16 @@ def check_pdf():
         # 3. 맞춤법 검사 실행
         result = processor.process(input_pdf_path, output_pdf_path)
 
+        # 3-1. 무료 한도 초과 시 결제 안내 응답
+        if result.get('payment_required'):
+            return jsonify({
+                'status': 'payment_required',
+                'message': result.get('message'),
+                'chars': result.get('chars', 0),
+                'limit': result.get('limit', 0),
+                'price_id': os.getenv('STRIPE_PRICE_ID', '')
+            }), 402
+
         # 4. 이메일을 CSV에 저장 (입력 시)
         if email:
             try:
