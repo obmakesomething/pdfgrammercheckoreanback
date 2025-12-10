@@ -143,7 +143,7 @@ export default function PaymentModal({
               {priceInfo.price.toLocaleString()}원
             </p>
             <p className="text-xs text-gray-400 mt-2">
-              * 5만자 초과분에 대해 만자당 500원이 부과됩니다
+              * 5만자 초과분에 대해 만자당 100원이 부과됩니다
             </p>
           </div>
 

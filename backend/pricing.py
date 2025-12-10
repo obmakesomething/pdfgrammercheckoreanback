@@ -7,7 +7,7 @@
 
 # 과금 설정
 FREE_CHAR_LIMIT = 50000  # 무료 글자 수 (5만자)
-PRICE_PER_10K_CHARS = 500  # 만자당 500원
+PRICE_PER_10K_CHARS = 100  # 만자당 100원
 
 
 class PricingCalculator:

@@ -238,7 +238,7 @@ function HomeContent() {
           {/* 요금 안내 */}
           <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm">
             <span>💡</span>
-            <span>5만자까지 무료 | 초과시 만자당 500원</span>
+            <span>5만자까지 무료 | 초과시 만자당 100원</span>
           </div>
         </div>
 
