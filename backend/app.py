@@ -13,6 +13,9 @@ import csv
 import datetime
 from main_processor import GrammarCheckProcessor
 from email_sender import EmailSender
+from pricing import pricing_calculator
+from toss_payments import toss_payments
+from pdf_extractor import SimplePDFExtractor
 from dotenv import load_dotenv
 
 # 환경 변수 로드
@@ -24,6 +27,20 @@ CORS(app)  # CORS 허용
 # 프로세서 및 이메일 발송기 초기화
 processor = GrammarCheckProcessor()
 email_sender = EmailSender()
+
+# 에러 코드 정의
+ERROR_CODES = {
+    'FILE_TOO_LARGE': '파일 크기가 너무 큽니다 (최대 20MB)',
+    'TOO_MANY_CHARS': '글자 수가 너무 많습니다',
+    'PDF_READ_FAILED': 'PDF 파일을 읽을 수 없습니다. 파일이 손상되었거나 암호화되어 있을 수 있습니다.',
+    'NO_TEXT_FOUND': 'PDF에서 텍스트를 추출할 수 없습니다. 이미지 기반 PDF일 수 있습니다.',
+    'PAYMENT_REQUIRED': '결제가 필요합니다',
+    'PROCESSING_FAILED': '처리 중 오류가 발생했습니다'
+}
+
+# 제한 설정
+MAX_FILE_SIZE_MB = 20
+MAX_CHAR_LIMIT = 500000  # 50만자 제한
 
 
 @app.route('/health', methods=['GET'])
@@ -198,6 +215,258 @@ def check_pdf():
         }), 500
 
 
+
+
+@app.route('/api/analyze-pdf', methods=['POST'])
+def analyze_pdf():
+    """
+    PDF 분석 API - 글자 수 확인 및 가격 계산
+
+    Request:
+        - multipart/form-data
+        - pdf: PDF 파일
+
+    Response:
+        {
+            'status': 'success' | 'error',
+            'char_count': int,
+            'price_info': {...},
+            'needs_payment': bool
+        }
+    """
+    try:
+        if 'pdf' not in request.files:
+            return jsonify({
+                'status': 'error',
+                'error_code': 'NO_FILE',
+                'message': 'PDF 파일이 없습니다'
+            }), 400
+
+        pdf_file = request.files['pdf']
+
+        if pdf_file.filename == '':
+            return jsonify({
+                'status': 'error',
+                'error_code': 'NO_FILE',
+                'message': '파일이 선택되지 않았습니다'
+            }), 400
+
+        if not pdf_file.filename.lower().endswith('.pdf'):
+            return jsonify({
+                'status': 'error',
+                'error_code': 'INVALID_FILE',
+                'message': 'PDF 파일만 업로드 가능합니다'
+            }), 400
+
+        # 파일 크기 검증
+        pdf_file.seek(0, os.SEEK_END)
+        file_size = pdf_file.tell()
+        pdf_file.seek(0)
+
+        if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
+            return jsonify({
+                'status': 'error',
+                'error_code': 'FILE_TOO_LARGE',
+                'message': ERROR_CODES['FILE_TOO_LARGE']
+            }), 400
+
+        # 임시 파일 저장
+        temp_dir = tempfile.gettempdir()
+        file_id = str(uuid.uuid4())
+        temp_pdf_path = os.path.join(temp_dir, f"{file_id}_analyze.pdf")
+        pdf_file.save(temp_pdf_path)
+
+        try:
+            # PDF에서 글자 수 추출
+            extractor = SimplePDFExtractor(temp_pdf_path)
+            text_with_positions, raw_text = extractor.extract_text_with_positions()
+            char_count = len(raw_text.strip())
+
+            if char_count == 0:
+                return jsonify({
+                    'status': 'error',
+                    'error_code': 'NO_TEXT_FOUND',
+                    'message': ERROR_CODES['NO_TEXT_FOUND']
+                }), 400
+
+            if char_count > MAX_CHAR_LIMIT:
+                return jsonify({
+                    'status': 'error',
+                    'error_code': 'TOO_MANY_CHARS',
+                    'message': f'{ERROR_CODES["TOO_MANY_CHARS"]} (최대 {MAX_CHAR_LIMIT:,}자, 현재 {char_count:,}자)'
+                }), 400
+
+            # 가격 계산
+            price_info = pricing_calculator.calculate_price(char_count)
+
+            return jsonify({
+                'status': 'success',
+                'char_count': char_count,
+                'price_info': price_info,
+                'needs_payment': not price_info['is_free'],
+                'file_size_mb': round(file_size / 1024 / 1024, 2)
+            }), 200
+
+        except Exception as e:
+            print(f"PDF 분석 오류: {e}")
+            return jsonify({
+                'status': 'error',
+                'error_code': 'PDF_READ_FAILED',
+                'message': ERROR_CODES['PDF_READ_FAILED']
+            }), 400
+
+        finally:
+            # 임시 파일 삭제
+            if os.path.exists(temp_pdf_path):
+                os.remove(temp_pdf_path)
+
+    except Exception as e:
+        print(f"분석 API 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'error_code': 'SERVER_ERROR',
+            'message': f'서버 오류: {str(e)}'
+        }), 500
+
+
+@app.route('/api/pricing', methods=['GET'])
+def get_pricing():
+    """요금 정보 조회 API"""
+    return jsonify({
+        'status': 'success',
+        'pricing': pricing_calculator.get_price_info()
+    }), 200
+
+
+@app.route('/api/payment/request', methods=['POST'])
+def create_payment_request():
+    """
+    결제 요청 생성 API
+
+    Request:
+        - application/json
+        - amount: 결제 금액
+        - char_count: 글자 수
+        - email: 고객 이메일
+
+    Response:
+        결제 요청 정보 (프론트엔드에서 토스페이먼츠 SDK에 전달)
+    """
+    try:
+        data = request.get_json()
+        amount = data.get('amount')
+        char_count = data.get('char_count')
+        email = data.get('email')
+
+        if not all([amount, char_count, email]):
+            return jsonify({
+                'status': 'error',
+                'message': '필수 항목이 누락되었습니다'
+            }), 400
+
+        # 가격 검증
+        expected_price = pricing_calculator.calculate_price(char_count)
+        if expected_price['price'] != amount:
+            return jsonify({
+                'status': 'error',
+                'message': '결제 금액이 일치하지 않습니다'
+            }), 400
+
+        # 결제 요청 정보 생성
+        payment_request = toss_payments.create_payment_request(
+            amount=amount,
+            order_name=f'PDF 맞춤법 검사 ({char_count:,}자)',
+            customer_email=email,
+            char_count=char_count
+        )
+
+        return jsonify({
+            'status': 'success',
+            'payment': payment_request
+        }), 200
+
+    except Exception as e:
+        print(f"결제 요청 생성 오류: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'결제 요청 생성 실패: {str(e)}'
+        }), 500
+
+
+@app.route('/api/payment/confirm', methods=['POST'])
+def confirm_payment():
+    """
+    결제 승인 API (토스페이먼츠 콜백 후 서버에서 호출)
+
+    Request:
+        - application/json
+        - paymentKey: 토스페이먼츠 결제 키
+        - orderId: 주문 ID
+        - amount: 결제 금액
+
+    Response:
+        결제 승인 결과
+    """
+    try:
+        data = request.get_json()
+        payment_key = data.get('paymentKey')
+        order_id = data.get('orderId')
+        amount = data.get('amount')
+
+        if not all([payment_key, order_id, amount]):
+            return jsonify({
+                'status': 'error',
+                'message': '필수 항목이 누락되었습니다'
+            }), 400
+
+        # 결제 승인 요청
+        result = toss_payments.confirm_payment(payment_key, order_id, amount)
+
+        if result['success']:
+            # 결제 성공 로깅
+            print(f"✓ 결제 성공: {order_id}, {amount:,}원")
+
+            # 결제 내역 CSV 저장
+            try:
+                csv_file = 'payment_history.csv'
+                file_exists = os.path.exists(csv_file)
+
+                with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=[
+                        'timestamp', 'order_id', 'payment_key', 'amount', 'status'
+                    ])
+                    if not file_exists:
+                        writer.writeheader()
+                    writer.writerow({
+                        'timestamp': datetime.datetime.now().isoformat(),
+                        'order_id': order_id,
+                        'payment_key': payment_key,
+                        'amount': amount,
+                        'status': 'confirmed'
+                    })
+            except Exception as e:
+                print(f"결제 내역 저장 실패: {e}")
+
+            return jsonify({
+                'status': 'success',
+                'message': '결제가 완료되었습니다',
+                'data': result
+            }), 200
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': result.get('error_message', '결제 승인 실패'),
+                'error_code': result.get('error_code')
+            }), 400
+
+    except Exception as e:
+        print(f"결제 승인 오류: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'결제 승인 실패: {str(e)}'
+        }), 500
 
 
 @app.route('/api/survey', methods=['POST'])
