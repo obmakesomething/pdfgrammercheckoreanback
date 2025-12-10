@@ -61,13 +61,10 @@ def check_pdf():
         - multipart/form-data
         - pdf: PDF 파일
         - email: 이메일 주소
+        - free_mode: 'true'이면 5만자까지만 무료로 검사 (선택)
 
     Response:
-        {
-            'status': 'success' | 'error',
-            'message': str,
-            'errors_found': int
-        }
+        PDF 파일 또는 에러 JSON
     """
     try:
         # 1. 요청 검증
@@ -85,6 +82,7 @@ def check_pdf():
 
         pdf_file = request.files['pdf']
         email = request.form['email']
+        free_mode = request.form.get('free_mode', 'false').lower() == 'true'
 
         # 파일명 검증
         if pdf_file.filename == '':
@@ -111,9 +109,12 @@ def check_pdf():
             }), 400
 
         print(f"\n{'=' * 60}")
-        print(f"새로운 요청: {pdf_file.filename}")
-        print(f"이메일: {email}")
-        print(f"파일 크기: {file_size / 1024 / 1024:.2f} MB")
+        print(f"[API] /api/check-pdf 요청")
+        print(f"{'=' * 60}")
+        print(f"  파일명: {pdf_file.filename}")
+        print(f"  이메일: {email}")
+        print(f"  파일 크기: {file_size / 1024 / 1024:.2f} MB")
+        print(f"  무료 모드: {free_mode}")
         print(f"{'=' * 60}")
 
         # 2. 임시 파일 저장
@@ -123,31 +124,71 @@ def check_pdf():
         output_pdf_path = os.path.join(temp_dir, f"{file_id}_output.pdf")
 
         pdf_file.save(input_pdf_path)
-        print(f"임시 파일 저장: {input_pdf_path}")
+        print(f"[저장] 임시 파일: {input_pdf_path}")
 
-        # 3. 맞춤법 검사 실행
-        result = processor.process(input_pdf_path, output_pdf_path)
+        # 3. 글자 수 확인
+        try:
+            extractor = SimplePDFExtractor(input_pdf_path)
+            text_with_positions, raw_text = extractor.extract_text_with_positions()
+            char_count = len(raw_text.strip())
+            print(f"[분석] 총 글자 수: {char_count:,}자")
+        except Exception as e:
+            print(f"[오류] PDF 텍스트 추출 실패: {e}")
+            return jsonify({
+                'status': 'error',
+                'error_code': 'PDF_READ_FAILED',
+                'message': ERROR_CODES['PDF_READ_FAILED']
+            }), 400
 
-        # 4. 이메일을 CSV에 저장
+        # 4. 글자 수 제한 체크
+        FREE_LIMIT = 50000
+
+        if char_count > FREE_LIMIT and not free_mode:
+            # 결제가 필요한 경우
+            price_info = pricing_calculator.calculate_price(char_count)
+            print(f"[결제필요] {char_count:,}자 > {FREE_LIMIT:,}자 (무료한도)")
+            print(f"[결제필요] 예상 금액: {price_info['price']:,}원")
+
+            return jsonify({
+                'status': 'payment_required',
+                'error_code': 'PAYMENT_REQUIRED',
+                'message': f'글자 수가 무료 한도({FREE_LIMIT:,}자)를 초과했습니다. 결제가 필요합니다.',
+                'char_count': char_count,
+                'free_limit': FREE_LIMIT,
+                'price_info': price_info
+            }), 402
+
+        # 5. 맞춤법 검사 실행
+        max_chars = FREE_LIMIT if free_mode else None
+        if free_mode and char_count > FREE_LIMIT:
+            print(f"[무료모드] {FREE_LIMIT:,}자까지만 검사합니다 (전체: {char_count:,}자)")
+
+        print(f"[처리] 맞춤법 검사 시작...")
+        result = processor.process(input_pdf_path, output_pdf_path, max_chars=max_chars)
+        print(f"[처리] 검사 완료 - 오류 {result['errors_found']}개 발견")
+
+        # 6. 이메일을 CSV에 저장
         try:
             csv_file = 'user_emails.csv'
             file_exists = os.path.exists(csv_file)
 
             with open(csv_file, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=['timestamp', 'email', 'filename', 'errors_found'])
+                writer = csv.DictWriter(f, fieldnames=['timestamp', 'email', 'filename', 'char_count', 'errors_found', 'free_mode'])
                 if not file_exists:
                     writer.writeheader()
                 writer.writerow({
                     'timestamp': datetime.datetime.now().isoformat(),
                     'email': email,
                     'filename': pdf_file.filename,
-                    'errors_found': result['errors_found']
+                    'char_count': char_count,
+                    'errors_found': result['errors_found'],
+                    'free_mode': free_mode
                 })
-            print(f"이메일 저장 완료: {email}")
+            print(f"[저장] 이메일 기록 완료: {email}")
         except Exception as e:
-            print(f"이메일 저장 실패: {e}")
+            print(f"[오류] 이메일 저장 실패: {e}")
 
-        # 5. 이메일 발송 및 PDF 파일 반환
+        # 7. 이메일 발송 및 PDF 파일 반환
         if result['success']:
             # 오류가 있으면 수정된 PDF, 없으면 원본 PDF
             pdf_to_send = output_pdf_path if result['errors_found'] > 0 else input_pdf_path
@@ -159,6 +200,7 @@ def check_pdf():
 
                 # 이메일 발송
                 try:
+                    print(f"[이메일] 발송 시작: {email}")
                     email_success = email_sender.send_grammar_check_result(
                         to_email=email,
                         pdf_path=pdf_to_send,
@@ -166,12 +208,13 @@ def check_pdf():
                         original_filename=pdf_file.filename
                     )
                     if email_success:
-                        print(f"✓ 이메일 발송 성공: {email}")
+                        print(f"[이메일] ✓ 발송 성공: {email}")
                     else:
-                        print(f"✗ 이메일 발송 실패: {email}")
+                        print(f"[이메일] ✗ 발송 실패: {email}")
                 except Exception as email_error:
-                    print(f"✗ 이메일 발송 중 오류: {email_error}")
+                    print(f"[이메일] ✗ 발송 중 오류: {email_error}")
 
+                print(f"[응답] PDF 파일 반환: {download_name}")
                 response = send_file(
                     pdf_to_send,
                     mimetype='application/pdf',
@@ -180,9 +223,11 @@ def check_pdf():
                 )
                 # 오류 개수를 헤더에 추가
                 response.headers['X-Errors-Found'] = str(result['errors_found'])
+                response.headers['X-Char-Count'] = str(char_count)
+                response.headers['X-Free-Mode'] = str(free_mode)
                 # CORS 헤더 명시적으로 추가
                 response.headers['Access-Control-Allow-Origin'] = '*'
-                response.headers['Access-Control-Expose-Headers'] = 'X-Errors-Found'
+                response.headers['Access-Control-Expose-Headers'] = 'X-Errors-Found, X-Char-Count, X-Free-Mode'
                 return response
             else:
                 return jsonify({

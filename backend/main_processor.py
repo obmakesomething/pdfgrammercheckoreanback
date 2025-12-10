@@ -25,13 +25,14 @@ class GrammarCheckProcessor:
     def __init__(self):
         self.spell_checker = SpellChecker()
 
-    def process(self, input_pdf_path: str, output_pdf_path: str = None) -> dict:
+    def process(self, input_pdf_path: str, output_pdf_path: str = None, max_chars: int = None) -> dict:
         """
         PDF 맞춤법 검사 전체 프로세스 실행
 
         Args:
             input_pdf_path: 입력 PDF 파일 경로
             output_pdf_path: 출력 PDF 파일 경로 (없으면 자동 생성)
+            max_chars: 최대 검사할 글자 수 (None이면 전체 검사)
 
         Returns:
             dict: 처리 결과
@@ -44,6 +45,8 @@ class GrammarCheckProcessor:
         """
         print("\n" + "=" * 70)
         print("PDF 맞춤법 검사 시작")
+        if max_chars:
+            print(f"  ➤ 최대 {max_chars:,}자까지 검사 (무료 모드)")
         print("=" * 70)
 
         try:
@@ -51,9 +54,33 @@ class GrammarCheckProcessor:
             print("\n[1/5] PDF 텍스트 추출 중 (파라그래프 단위)...")
             extractor = SimplePDFExtractor(input_pdf_path)
             paragraphs, text_with_positions, raw_text = extractor.extract_paragraphs_with_positions()
+
+            total_chars = len(raw_text)
             print(f"  ✓ 총 {len(text_with_positions)}자 추출 완료")
             print(f"  ✓ 파라그래프 개수: {len(paragraphs)}개")
             print(f"  ✓ 텍스트 미리보기: {raw_text[:100]}...")
+
+            # max_chars 제한 적용
+            if max_chars and total_chars > max_chars:
+                print(f"  ⚠ 글자 수 제한 적용: {total_chars:,}자 → {max_chars:,}자")
+                # 파라그래프를 max_chars까지만 포함
+                limited_paragraphs = []
+                char_count = 0
+                for para in paragraphs:
+                    para_len = len(para['text'])
+                    if char_count + para_len <= max_chars:
+                        limited_paragraphs.append(para)
+                        char_count += para_len
+                    else:
+                        # 남은 글자 수만큼 잘라서 추가
+                        remaining = max_chars - char_count
+                        if remaining > 100:  # 최소 100자 이상일 때만
+                            truncated_para = para.copy()
+                            truncated_para['text'] = para['text'][:remaining]
+                            limited_paragraphs.append(truncated_para)
+                        break
+                paragraphs = limited_paragraphs
+                print(f"  ✓ 제한 후 파라그래프 개수: {len(paragraphs)}개")
 
             # 2단계: 텍스트 전처리 (앵커 매핑)
             print("\n[2/5] 텍스트 전처리 중...")
