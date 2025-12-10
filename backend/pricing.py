@@ -46,8 +46,8 @@ class PricingCalculator:
             }
 
         billable_chars = char_count - self.free_limit
-        # 만자 단위로 올림 계산
-        units = (billable_chars + self.unit_size - 1) // self.unit_size
+        # 만자 단위로 절삭 (내림) 계산
+        units = billable_chars // self.unit_size
         price = units * self.price_per_unit
 
         return {
