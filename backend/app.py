@@ -130,7 +130,7 @@ def check_pdf():
         except Exception as e:
             print(f"이메일 저장 실패: {e}")
 
-        # 5. PDF 파일 반환 (다운로드)
+        # 5. 이메일 발송 및 PDF 파일 반환
         if result['success']:
             # 오류가 있으면 수정된 PDF, 없으면 원본 PDF
             pdf_to_send = output_pdf_path if result['errors_found'] > 0 else input_pdf_path
@@ -139,6 +139,21 @@ def check_pdf():
                 # 파일 이름 생성
                 base_name = os.path.splitext(pdf_file.filename)[0]
                 download_name = f"{base_name}_맞춤법검사.pdf"
+
+                # 이메일 발송
+                try:
+                    email_success = email_sender.send_grammar_check_result(
+                        to_email=email,
+                        pdf_path=pdf_to_send,
+                        errors_count=result['errors_found'],
+                        original_filename=pdf_file.filename
+                    )
+                    if email_success:
+                        print(f"✓ 이메일 발송 성공: {email}")
+                    else:
+                        print(f"✗ 이메일 발송 실패: {email}")
+                except Exception as email_error:
+                    print(f"✗ 이메일 발송 중 오류: {email_error}")
 
                 response = send_file(
                     pdf_to_send,
