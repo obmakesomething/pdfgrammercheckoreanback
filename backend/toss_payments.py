@@ -38,7 +38,8 @@ class TossPayments:
         amount: int,
         order_name: str,
         customer_email: str,
-        char_count: int
+        char_count: int,
+        order_id: str = None
     ) -> dict:
         """
         결제 요청 정보 생성 (프론트엔드에서 사용)
@@ -48,11 +49,13 @@ class TossPayments:
             order_name: 주문명
             customer_email: 고객 이메일
             char_count: 검사할 글자 수
+            order_id: 주문 ID (미지정 시 자동 생성)
 
         Returns:
             dict: 결제 요청에 필요한 정보
         """
-        order_id = f"PDFGC_{uuid.uuid4().hex[:16]}"
+        if not order_id:
+            order_id = f"PDFGC_{uuid.uuid4().hex[:16]}"
 
         return {
             'client_key': self.client_key,

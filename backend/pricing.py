@@ -4,6 +4,7 @@
 과금 시스템 모듈
 글자 수 기반 요금 계산
 """
+import math
 
 # 과금 설정
 FREE_CHAR_LIMIT = 50000  # 무료 글자 수 (5만자)
@@ -46,14 +47,16 @@ class PricingCalculator:
             }
 
         billable_chars = char_count - self.free_limit
-        # 만자 단위로 절삭 (내림) 계산
-        units = billable_chars // self.unit_size
+        # 만자 단위로 올림 계산 (부분 단위도 과금)
+        # 예: 50,001자 → 1원, 59,999자 → 100원, 60,000자 → 100원, 60,001자 → 200원
+        units = math.ceil(billable_chars / self.unit_size)
         price = units * self.price_per_unit
 
         return {
             'char_count': char_count,
             'free_chars': self.free_limit,
             'billable_chars': billable_chars,
+            'units': units,
             'price': price,
             'is_free': False,
             'breakdown': f'{char_count:,}자 중 {self.free_limit:,}자 무료, {billable_chars:,}자 과금 ({units}만자 × {self.price_per_unit}원 = {price:,}원)'
