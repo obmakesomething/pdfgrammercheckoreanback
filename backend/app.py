@@ -4,13 +4,14 @@
 Flask API 서버
 PDF 맞춤법 검사 API 제공
 """
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, make_response
 from flask_cors import CORS
 import os
 import tempfile
 import uuid
 import csv
 import datetime
+from urllib.parse import quote
 from main_processor import GrammarCheckProcessor
 from email_sender import EmailSender
 from toss_payments import TossPayments
@@ -150,17 +151,28 @@ def check_pdf():
                 base_name = os.path.splitext(pdf_file.filename)[0]
                 download_name = f"{base_name}_맞춤법검사.pdf"
 
-                response = send_file(
-                    pdf_to_send,
-                    mimetype='application/pdf',
-                    as_attachment=True,
-                    download_name=download_name
+                # 파일 읽기
+                with open(pdf_to_send, 'rb') as f:
+                    pdf_data = f.read()
+
+                # Response 생성
+                response = make_response(pdf_data)
+                response.headers['Content-Type'] = 'application/pdf'
+
+                # Content-Disposition 헤더 설정 (RFC 5987 형식으로 한글 파일명 지원)
+                # ASCII 안전한 파일명과 UTF-8 인코딩된 파일명 모두 제공
+                ascii_filename = "grammar_checked.pdf"
+                encoded_filename = quote(download_name)
+                response.headers['Content-Disposition'] = (
+                    f"attachment; filename=\"{ascii_filename}\"; "
+                    f"filename*=UTF-8''{encoded_filename}"
                 )
+
                 # 오류 개수를 헤더에 추가
                 response.headers['X-Errors-Found'] = str(result['errors_found'])
                 # CORS 헤더 명시적으로 추가
                 response.headers['Access-Control-Allow-Origin'] = '*'
-                response.headers['Access-Control-Expose-Headers'] = 'X-Errors-Found'
+                response.headers['Access-Control-Expose-Headers'] = 'X-Errors-Found, Content-Disposition'
                 return response
             else:
                 return jsonify({
