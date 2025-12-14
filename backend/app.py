@@ -13,6 +13,8 @@ import csv
 import datetime
 from main_processor import GrammarCheckProcessor
 from email_sender import EmailSender
+from toss_payments import TossPayments
+from payment_storage import PaymentStorage
 from dotenv import load_dotenv
 
 # 환경 변수 로드
@@ -24,6 +26,14 @@ CORS(app)  # CORS 허용
 # 프로세서 및 이메일 발송기 초기화
 processor = GrammarCheckProcessor()
 email_sender = EmailSender()
+
+# 결제 시스템 초기화
+toss_payments = TossPayments()
+payment_storage = PaymentStorage()
+
+# 상품 정보 (환경변수에서 가져오거나 기본값 사용)
+PRODUCT_AMOUNT = int(os.getenv('PRODUCT_AMOUNT', '3900'))  # 기본 3,900원
+PRODUCT_NAME = os.getenv('PRODUCT_NAME', 'PDF 맞춤법 검사 프리미엄')
 
 
 @app.route('/health', methods=['GET'])
@@ -250,6 +260,317 @@ def submit_survey():
             'message': '설문조사 제출 중 오류가 발생했습니다'
         }), 500
 
+
+# ==================== 결제 API ====================
+
+@app.route('/api/payment/create', methods=['POST'])
+def create_payment():
+    """
+    결제 생성 API - 주문 정보 생성
+
+    Request:
+        - application/json
+        - email: 구매자 이메일
+
+    Response:
+        {
+            'status': 'success',
+            'order_id': str,
+            'amount': int,
+            'product_name': str
+        }
+    """
+    try:
+        data = request.get_json()
+        email = data.get('email')
+
+        if not email:
+            return jsonify({
+                'status': 'error',
+                'message': '이메일 주소가 필요합니다.'
+            }), 400
+
+        # 주문 ID 생성
+        order_id = payment_storage.generate_order_id()
+
+        # 결제 기록 생성 (대기 상태)
+        payment_storage.create_payment(
+            order_id=order_id,
+            amount=PRODUCT_AMOUNT,
+            email=email,
+            product_name=PRODUCT_NAME
+        )
+
+        print(f"\n[결제 생성] order_id: {order_id}, email: {email}, amount: {PRODUCT_AMOUNT}")
+
+        return jsonify({
+            'status': 'success',
+            'order_id': order_id,
+            'amount': PRODUCT_AMOUNT,
+            'product_name': PRODUCT_NAME,
+            'client_key': os.getenv('TOSS_CLIENT_KEY', '')
+        }), 200
+
+    except Exception as e:
+        print(f"결제 생성 오류: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'결제 생성 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+
+@app.route('/api/payment/confirm', methods=['POST'])
+def confirm_payment():
+    """
+    결제 승인 API - 토스페이먼츠 결제 승인 요청
+
+    Request:
+        - application/json
+        - paymentKey: 결제 키
+        - orderId: 주문 ID
+        - amount: 결제 금액
+
+    Response:
+        {
+            'status': 'success' | 'error',
+            'message': str,
+            'receipt_url': str (성공 시)
+        }
+    """
+    try:
+        data = request.get_json()
+
+        payment_key = data.get('paymentKey')
+        order_id = data.get('orderId')
+        amount = data.get('amount')
+
+        # 필수 파라미터 검증
+        if not all([payment_key, order_id, amount]):
+            return jsonify({
+                'status': 'error',
+                'message': '필수 파라미터가 누락되었습니다.'
+            }), 400
+
+        # 금액 검증 (서버에서 저장한 금액과 일치하는지)
+        saved_payment = payment_storage.get_payment_by_order_id(order_id)
+        if not saved_payment:
+            return jsonify({
+                'status': 'error',
+                'message': '유효하지 않은 주문입니다.'
+            }), 400
+
+        if int(saved_payment['amount']) != int(amount):
+            return jsonify({
+                'status': 'error',
+                'message': '결제 금액이 일치하지 않습니다.'
+            }), 400
+
+        print(f"\n[결제 승인 요청] order_id: {order_id}, amount: {amount}")
+
+        # 토스페이먼츠 결제 승인 요청
+        result = toss_payments.confirm_payment(
+            payment_key=payment_key,
+            order_id=order_id,
+            amount=int(amount)
+        )
+
+        if result.success:
+            # 결제 완료 처리
+            payment_storage.complete_payment(
+                order_id=order_id,
+                payment_key=payment_key,
+                method=result.method or '',
+                approved_at=result.approved_at or datetime.datetime.now().isoformat(),
+                receipt_url=result.receipt_url
+            )
+
+            print(f"[결제 승인 완료] order_id: {order_id}")
+
+            return jsonify({
+                'status': 'success',
+                'message': '결제가 완료되었습니다.',
+                'order_id': order_id,
+                'amount': result.amount,
+                'method': result.method,
+                'approved_at': result.approved_at,
+                'receipt_url': result.receipt_url
+            }), 200
+        else:
+            # 결제 실패 처리
+            payment_storage.fail_payment(order_id, result.error_message or '결제 실패')
+
+            print(f"[결제 승인 실패] order_id: {order_id}, error: {result.error_message}")
+
+            return jsonify({
+                'status': 'error',
+                'code': result.error_code,
+                'message': result.error_message
+            }), 400
+
+    except Exception as e:
+        print(f"결제 승인 오류: {e}")
+        import traceback
+        traceback.print_exc()
+
+        return jsonify({
+            'status': 'error',
+            'message': f'결제 승인 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+
+@app.route('/api/payment/cancel', methods=['POST'])
+def cancel_payment():
+    """
+    결제 취소 API
+
+    Request:
+        - application/json
+        - orderId: 주문 ID
+        - cancelReason: 취소 사유
+
+    Response:
+        {'status': 'success' | 'error', 'message': str}
+    """
+    try:
+        data = request.get_json()
+
+        order_id = data.get('orderId')
+        cancel_reason = data.get('cancelReason', '고객 요청')
+
+        if not order_id:
+            return jsonify({
+                'status': 'error',
+                'message': '주문 ID가 필요합니다.'
+            }), 400
+
+        # 저장된 결제 정보 조회
+        saved_payment = payment_storage.get_payment_by_order_id(order_id)
+        if not saved_payment:
+            return jsonify({
+                'status': 'error',
+                'message': '유효하지 않은 주문입니다.'
+            }), 400
+
+        if saved_payment['status'] != 'completed':
+            return jsonify({
+                'status': 'error',
+                'message': '취소할 수 없는 결제 상태입니다.'
+            }), 400
+
+        # 토스페이먼츠 결제 취소 요청
+        result = toss_payments.cancel_payment(
+            payment_key=saved_payment['payment_key'],
+            cancel_reason=cancel_reason
+        )
+
+        if result.success:
+            payment_storage.cancel_payment(order_id, cancel_reason)
+            return jsonify({
+                'status': 'success',
+                'message': '결제가 취소되었습니다.'
+            }), 200
+        else:
+            return jsonify({
+                'status': 'error',
+                'code': result.error_code,
+                'message': result.error_message
+            }), 400
+
+    except Exception as e:
+        print(f"결제 취소 오류: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'결제 취소 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+
+@app.route('/api/payment/status/<order_id>', methods=['GET'])
+def get_payment_status(order_id):
+    """
+    결제 상태 조회 API
+
+    Response:
+        {
+            'status': 'success',
+            'payment': {
+                'order_id': str,
+                'amount': int,
+                'status': str,
+                ...
+            }
+        }
+    """
+    try:
+        payment = payment_storage.get_payment_by_order_id(order_id)
+
+        if not payment:
+            return jsonify({
+                'status': 'error',
+                'message': '결제 정보를 찾을 수 없습니다.'
+            }), 404
+
+        return jsonify({
+            'status': 'success',
+            'payment': {
+                'order_id': payment['order_id'],
+                'amount': int(payment['amount']),
+                'product_name': payment['product_name'],
+                'payment_status': payment['status'],
+                'method': payment.get('method', ''),
+                'approved_at': payment.get('approved_at', ''),
+                'receipt_url': payment.get('receipt_url', '')
+            }
+        }), 200
+
+    except Exception as e:
+        print(f"결제 상태 조회 오류: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'결제 상태 조회 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+
+@app.route('/api/payment/verify', methods=['POST'])
+def verify_payment():
+    """
+    결제 검증 API - 이메일로 유효한 결제가 있는지 확인
+
+    Request:
+        - application/json
+        - email: 확인할 이메일
+
+    Response:
+        {
+            'status': 'success',
+            'has_valid_payment': bool
+        }
+    """
+    try:
+        data = request.get_json()
+        email = data.get('email')
+
+        if not email:
+            return jsonify({
+                'status': 'error',
+                'message': '이메일 주소가 필요합니다.'
+            }), 400
+
+        has_payment = payment_storage.has_valid_subscription(email)
+
+        return jsonify({
+            'status': 'success',
+            'has_valid_payment': has_payment
+        }), 200
+
+    except Exception as e:
+        print(f"결제 검증 오류: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': f'결제 검증 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+
+# ==================== 기존 API ====================
 
 @app.route('/api/test', methods=['GET'])
 def test():

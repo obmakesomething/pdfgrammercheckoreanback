@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import PDFUploader from '@/components/PDFUploader'
 import AdPlayer from '@/components/AdPlayer'
 import SEOContent from '@/components/SEOContent'
 
 export default function Home() {
+  const router = useRouter()
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [email, setEmail] = useState('')
   const [agreedToTerms, setAgreedToTerms] = useState(false)
@@ -15,6 +17,36 @@ export default function Home() {
   const [progressMessage, setProgressMessage] = useState('')
   const [errorsFound, setErrorsFound] = useState<number | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [hasPremium, setHasPremium] = useState(false)
+  const [checkingPremium, setCheckingPremium] = useState(false)
+
+  // 이메일 변경 시 프리미엄 상태 확인
+  useEffect(() => {
+    if (email && validateEmail(email)) {
+      checkPremiumStatus(email)
+    } else {
+      setHasPremium(false)
+    }
+  }, [email])
+
+  const checkPremiumStatus = async (userEmail: string) => {
+    setCheckingPremium(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.pdfgrammercheckorean.site'
+      const response = await fetch(`${apiUrl}/api/payment/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userEmail }),
+      })
+      const data = await response.json()
+      setHasPremium(data.has_valid_payment === true)
+    } catch (error) {
+      console.error('Premium check error:', error)
+      setHasPremium(false)
+    } finally {
+      setCheckingPremium(false)
+    }
+  }
 
   const handleSubmit = () => {
     // Validation
@@ -38,9 +70,24 @@ export default function Home() {
       return
     }
 
-    // Show ad
     setMessage(null)
-    setShowAd(true)
+
+    // 프리미엄 사용자는 광고 없이 바로 검사
+    if (hasPremium) {
+      handleAdComplete()
+    } else {
+      // 일반 사용자는 광고 시청
+      setShowAd(true)
+    }
+  }
+
+  const handlePremiumPurchase = () => {
+    // Validation
+    if (!email || !validateEmail(email)) {
+      setMessage({ type: 'error', text: '결제를 위해 먼저 이메일 주소를 입력해주세요.' })
+      return
+    }
+    router.push(`/payment?email=${encodeURIComponent(email)}`)
   }
 
   const validateEmail = (email: string) => {
@@ -159,6 +206,41 @@ export default function Home() {
               onSubmit={handleSubmit}
               isProcessing={isProcessing}
             />
+
+            {/* Premium Status */}
+            {email && validateEmail(email) && (
+              <div className={`p-4 rounded-lg border ${
+                hasPremium
+                  ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-300'
+                  : 'bg-gray-50 border-gray-200'
+              }`}>
+                {checkingPremium ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+                    <span className="text-gray-600 text-sm">프리미엄 상태 확인 중...</span>
+                  </div>
+                ) : hasPremium ? (
+                  <div className="flex items-center justify-center">
+                    <span className="text-yellow-700 font-semibold">
+                      ⭐ 프리미엄 사용자입니다 - 광고 없이 바로 검사하세요!
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="text-center sm:text-left">
+                      <p className="text-gray-700 font-medium">광고 없이 바로 검사하고 싶으신가요?</p>
+                      <p className="text-gray-500 text-sm">프리미엄 구매 시 광고 없이 무제한 이용 가능!</p>
+                    </div>
+                    <button
+                      onClick={handlePremiumPurchase}
+                      className="px-6 py-2 bg-gradient-to-r from-yellow-400 to-amber-500 text-white rounded-lg font-semibold hover:from-yellow-500 hover:to-amber-600 transition-all shadow-md whitespace-nowrap"
+                    >
+                      프리미엄 구매 (3,900원)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Message Display */}
             {message && (
