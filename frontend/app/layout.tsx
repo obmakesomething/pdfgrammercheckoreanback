@@ -48,6 +48,7 @@ export default function RootLayout({
         <link rel="manifest" href="/site.webmanifest" />
         <meta name="theme-color" content="#667eea" />
         <meta name="naver-site-verification" content="2af240779ebe3a2abbd5ed659a0d8f22589b1054" />
+        <meta name="monetag" content="b944860eaf94597da148ab864a6904b3" />
 
         {/* Google Analytics (GA4) */}
         <Script
