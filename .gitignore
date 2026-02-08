@@ -59,3 +59,7 @@ node_modules/
 tmp/
 temp/
 *.tmp
+
+# Next.js convention: allow frontend helper code under frontend/lib/
+!frontend/lib/
+!frontend/lib/**
