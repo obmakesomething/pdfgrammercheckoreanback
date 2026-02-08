@@ -53,7 +53,8 @@ class GrammarCheckProcessor:
             paragraphs, text_with_positions, raw_text = extractor.extract_paragraphs_with_positions()
             print(f"  ✓ 총 {len(text_with_positions)}자 추출 완료")
             print(f"  ✓ 파라그래프 개수: {len(paragraphs)}개")
-            print(f"  ✓ 텍스트 미리보기: {raw_text[:100]}...")
+            # Avoid logging raw user content (PII/privacy).
+            print(f"  ✓ 텍스트 길이: {len(raw_text)}자")
 
             # 2단계: 텍스트 전처리 (앵커 매핑)
             print("\n[2/5] 텍스트 전처리 중...")

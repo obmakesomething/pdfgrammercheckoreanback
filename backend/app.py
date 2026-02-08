@@ -71,14 +71,9 @@ def check_pdf():
                 'message': 'PDF 파일이 없습니다'
             }), 400
 
-        if 'email' not in request.form:
-            return jsonify({
-                'status': 'error',
-                'message': '이메일 주소가 없습니다'
-            }), 400
-
         pdf_file = request.files['pdf']
-        email = request.form['email']
+        # Email is optional (we're moving to miniapp flows and should avoid collecting PII by default).
+        email = (request.form.get('email') or '').strip()
 
         # 파일명 검증
         if pdf_file.filename == '':
@@ -106,7 +101,10 @@ def check_pdf():
 
         print(f"\n{'=' * 60}")
         print(f"새로운 요청: {pdf_file.filename}")
-        print(f"이메일: {email}")
+        if email:
+            print("이메일: (provided)")
+        else:
+            print("이메일: (none)")
         print(f"파일 크기: {file_size / 1024 / 1024:.2f} MB")
         print(f"{'=' * 60}")
 
@@ -122,24 +120,30 @@ def check_pdf():
         # 3. 맞춤법 검사 실행
         result = processor.process(input_pdf_path, output_pdf_path)
 
-        # 4. 이메일을 CSV에 저장
-        try:
-            csv_file = 'user_emails.csv'
-            file_exists = os.path.exists(csv_file)
+        # 4. (Optional) store request metadata.
+        # Default off to avoid collecting/storing PII in server files (Apps in Toss review readiness).
+        enable_email_csv = str(os.getenv('ENABLE_USER_EMAIL_CSV', '')).lower() in ('1', 'true', 'yes')
+        if enable_email_csv and email:
+            try:
+                csv_file = 'user_emails.csv'
+                file_exists = os.path.exists(csv_file)
 
-            with open(csv_file, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=['timestamp', 'email', 'filename', 'errors_found'])
-                if not file_exists:
-                    writer.writeheader()
-                writer.writerow({
-                    'timestamp': datetime.datetime.now().isoformat(),
-                    'email': email,
-                    'filename': pdf_file.filename,
-                    'errors_found': result['errors_found']
-                })
-            print(f"이메일 저장 완료: {email}")
-        except Exception as e:
-            print(f"이메일 저장 실패: {e}")
+                with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(
+                        f,
+                        fieldnames=['timestamp', 'email', 'filename', 'errors_found']
+                    )
+                    if not file_exists:
+                        writer.writeheader()
+                    writer.writerow({
+                        'timestamp': datetime.datetime.now().isoformat(),
+                        'email': email,
+                        'filename': pdf_file.filename,
+                        'errors_found': result['errors_found']
+                    })
+                print("이메일 저장 완료")
+            except Exception as e:
+                print(f"이메일 저장 실패: {e}")
 
         # 5. PDF 파일 반환 (다운로드)
         if result['success']:
@@ -173,6 +177,16 @@ def check_pdf():
                 # CORS 헤더 명시적으로 추가
                 response.headers['Access-Control-Allow-Origin'] = '*'
                 response.headers['Access-Control-Expose-Headers'] = 'X-Errors-Found, Content-Disposition'
+
+                # Clean up temp files after reading into memory.
+                try:
+                    if os.path.exists(input_pdf_path):
+                        os.remove(input_pdf_path)
+                    if os.path.exists(output_pdf_path):
+                        os.remove(output_pdf_path)
+                except Exception as e:
+                    print(f"임시 파일 삭제 실패: {e}")
+
                 return response
             else:
                 return jsonify({
@@ -226,7 +240,7 @@ def submit_survey():
 
         source = data.get('source')
         purpose = data.get('purpose')
-        email = data.get('email', 'anonymous')
+        email = (data.get('email') or '').strip()
 
         if not source or not purpose:
             return jsonify({
@@ -234,7 +248,7 @@ def submit_survey():
                 'message': '필수 항목이 누락되었습니다'
             }), 400
 
-        # 설문조사 데이터 저장 (현재는 로그만 출력, 추후 DB 저장)
+        # 설문조사 데이터 저장 (PII 최소화)
         import datetime
         timestamp = datetime.datetime.now().isoformat()
 
@@ -242,23 +256,24 @@ def submit_survey():
             'timestamp': timestamp,
             'source': source,
             'purpose': purpose,
-            'email': email
+            'email': email or 'anonymous'
         }
 
-        print(f"\n[설문조사 응답] {survey_log}")
+        # Avoid logging raw email.
+        print(f"\n[설문조사 응답] timestamp={timestamp} source={source} purpose={purpose} email={'provided' if email else 'none'}")
 
-        # CSV 파일로 저장 (간단한 로깅)
-        import csv
-        import os
+        # CSV 저장은 기본 비활성화 (ephemeral FS + PII 이슈)
+        enable_survey_csv = str(os.getenv('ENABLE_SURVEY_CSV', '')).lower() in ('1', 'true', 'yes')
+        if enable_survey_csv:
+            import csv
+            csv_file = 'survey_responses.csv'
+            file_exists = os.path.exists(csv_file)
 
-        csv_file = 'survey_responses.csv'
-        file_exists = os.path.exists(csv_file)
-
-        with open(csv_file, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=['timestamp', 'source', 'purpose', 'email'])
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(survey_log)
+            with open(csv_file, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=['timestamp', 'source', 'purpose', 'email'])
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(survey_log)
 
         return jsonify({
             'status': 'success',
