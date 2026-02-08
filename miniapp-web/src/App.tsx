@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { IAP, getDeviceId, saveBase64Data, showFullScreenAd, type IapProductListItem } from '@apps-in-toss/web-framework'
 import { checkPdf, uint8ArrayToBase64 } from './lib/checkPdf'
 import { fetchCreditsBalance, grantIapOrder } from './lib/credits'
+import { shouldShowAdForCharCount } from './lib/policy'
 
 const DEFAULT_API_BASE_URL = 'https://api.pdfgrammercheckorean.site'
 const MAX_PDF_SIZE_MB = 20
+const FREE_CHAR_LIMIT = 50000
 
 type Status = 'idle' | 'checking' | 'ready' | 'error'
 type PaywallInfo = {
@@ -141,11 +143,13 @@ function App() {
       resultBytesRef.current = result.bytes
       resultFileNameRef.current = result.fileName
 
-      // Best-effort ad (optional) before revealing the result.
-      try {
-        await tryShowFullScreenAd(adGroupId)
-      } catch {
-        // ignore
+      if (shouldShowAdForCharCount(result.charCount, FREE_CHAR_LIMIT)) {
+        // Best-effort ad (optional) before revealing the result.
+        try {
+          await tryShowFullScreenAd(adGroupId)
+        } catch {
+          // ignore
+        }
       }
 
       setErrorsFound(result.errorsFound)
