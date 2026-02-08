@@ -6,6 +6,15 @@ const DEFAULT_API_BASE_URL = 'https://api.pdfgrammercheckorean.site'
 const MAX_PDF_SIZE_MB = 20
 
 type Status = 'idle' | 'checking' | 'ready' | 'error'
+type PaywallInfo = {
+  message: string
+  charCount: number
+  freeCharLimit: number
+  unitChars: number
+  unitPriceWon: number
+  requiredUnits: number
+  priceWon: number
+}
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
@@ -57,6 +66,7 @@ function App() {
   const [errorsFound, setErrorsFound] = useState<number | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [paywall, setPaywall] = useState<PaywallInfo | null>(null)
 
   const resultBytesRef = useRef<Uint8Array | null>(null)
   const resultFileNameRef = useRef<string>('grammar_checked.pdf')
@@ -71,6 +81,7 @@ function App() {
     setStatus('idle')
     setErrorsFound(null)
     setMessage(null)
+    setPaywall(null)
     resultBytesRef.current = null
     resultFileNameRef.current = 'grammar_checked.pdf'
 
@@ -87,14 +98,8 @@ function App() {
     setStatus('checking')
     setMessage(null)
     setErrorsFound(null)
+    setPaywall(null)
     resultBytesRef.current = null
-
-    // Best-effort ad (optional).
-    try {
-      await tryShowFullScreenAd(adGroupId)
-    } catch {
-      // ignore
-    }
 
     try {
       const result = await checkPdf({
@@ -102,8 +107,31 @@ function App() {
         file: selectedFile,
       })
 
+      if (result.type === 'payment_required') {
+        setStatus('error')
+        setPaywall({
+          message: result.message,
+          charCount: result.charCount,
+          freeCharLimit: result.freeCharLimit,
+          unitChars: result.unitChars,
+          unitPriceWon: result.unitPriceWon,
+          requiredUnits: result.requiredUnits,
+          priceWon: result.priceWon,
+        })
+        setMessage(result.message)
+        return
+      }
+
       resultBytesRef.current = result.bytes
       resultFileNameRef.current = result.fileName
+
+      // Best-effort ad (optional) before revealing the result.
+      try {
+        await tryShowFullScreenAd(adGroupId)
+      } catch {
+        // ignore
+      }
+
       setErrorsFound(result.errorsFound)
       setStatus('ready')
       setMessage('검사가 완료되었습니다.')
@@ -232,6 +260,37 @@ function App() {
         {message && (
           <div className={`notice ${status === 'error' ? 'error' : 'info'}`} role="alert">
             {message}
+          </div>
+        )}
+
+        {status === 'error' && paywall && (
+          <div className="result" aria-label="결제 안내">
+            <div className="resultGrid">
+              <div className="resultItem">
+                <div className="resultLabel">텍스트 글자 수</div>
+                <div className="resultValue">
+                  {paywall.charCount.toLocaleString()}자
+                </div>
+              </div>
+              <div className="resultItem">
+                <div className="resultLabel">예상 결제</div>
+                <div className="resultValue">
+                  {paywall.priceWon.toLocaleString()}원
+                </div>
+              </div>
+            </div>
+
+            <div className="notice info" role="note">
+              50,000자까지는 광고 시청 후 무료입니다. 초과분은 10,000자당 100원으로 계산됩니다.
+            </div>
+
+            <button
+              className="button primary"
+              type="button"
+              onClick={reset}
+            >
+              다른 PDF 선택
+            </button>
           </div>
         )}
 

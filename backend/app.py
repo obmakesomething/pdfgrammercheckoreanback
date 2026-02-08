@@ -120,6 +120,28 @@ def check_pdf():
         # 3. 맞춤법 검사 실행
         result = processor.process(input_pdf_path, output_pdf_path)
 
+        # 3-1. 결제 필요(무료 한도 초과) 응답
+        if result.get('code') == 'PAYMENT_REQUIRED':
+            # 임시 파일 삭제
+            try:
+                if os.path.exists(input_pdf_path):
+                    os.remove(input_pdf_path)
+                if os.path.exists(output_pdf_path):
+                    os.remove(output_pdf_path)
+            except Exception as e:
+                print(f"임시 파일 삭제 실패: {e}")
+
+            return jsonify({
+                'status': 'payment_required',
+                'message': result.get('message') or '결제가 필요합니다.',
+                'char_count': result.get('char_count', 0),
+                'free_char_limit': result.get('free_char_limit', 0),
+                'unit_chars': result.get('unit_chars', 0),
+                'unit_price_won': result.get('unit_price_won', 0),
+                'required_units': result.get('required_units', 0),
+                'price_won': result.get('price_won', 0),
+            }), 402
+
         # 4. (Optional) store request metadata.
         # Default off to avoid collecting/storing PII in server files (Apps in Toss review readiness).
         enable_email_csv = str(os.getenv('ENABLE_USER_EMAIL_CSV', '')).lower() in ('1', 'true', 'yes')
@@ -174,9 +196,12 @@ def check_pdf():
 
                 # 오류 개수를 헤더에 추가
                 response.headers['X-Errors-Found'] = str(result['errors_found'])
+                # Character count (for UI/debugging; does not expose content).
+                if 'char_count' in result and result.get('char_count') is not None:
+                    response.headers['X-Char-Count'] = str(result.get('char_count'))
                 # CORS 헤더 명시적으로 추가
                 response.headers['Access-Control-Allow-Origin'] = '*'
-                response.headers['Access-Control-Expose-Headers'] = 'X-Errors-Found, Content-Disposition'
+                response.headers['Access-Control-Expose-Headers'] = 'X-Errors-Found, X-Char-Count, Content-Disposition'
 
                 # Clean up temp files after reading into memory.
                 try:

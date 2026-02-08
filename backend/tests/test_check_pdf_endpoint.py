@@ -148,7 +148,55 @@ class TestCheckPdfEndpoint(unittest.TestCase):
             self.assertFalse(os.path.exists(input_pdf_path))
             self.assertFalse(os.path.exists(output_pdf_path))
 
+    def test_check_pdf_returns_payment_required_when_processor_requests_it(self):
+        with _temp_cwd() as td:
+            app_mod = self._import_app()
+
+            fixed_uuid = app_mod.uuid.UUID('00000000-0000-0000-0000-000000000000')
+
+            def _fake_process(input_path, output_path):
+                return {
+                    'success': False,
+                    'code': 'PAYMENT_REQUIRED',
+                    'message': '결제가 필요합니다.',
+                    'char_count': 50001,
+                    'free_char_limit': 50000,
+                    'unit_chars': 10000,
+                    'unit_price_won': 100,
+                    'required_units': 1,
+                    'price_won': 100,
+                }
+
+            client = app_mod.app.test_client()
+
+            with patch.object(app_mod.uuid, 'uuid4', return_value=fixed_uuid), \
+                 patch.object(app_mod.tempfile, 'gettempdir', return_value=td), \
+                 patch.object(app_mod.processor, 'process', side_effect=_fake_process):
+                resp = client.post(
+                    '/api/check-pdf',
+                    data={
+                        'pdf': (io.BytesIO(b'%PDF-1.4\n%EOF\n'), 'test.pdf'),
+                    },
+                    content_type='multipart/form-data',
+                )
+
+            self.assertEqual(resp.status_code, 402)
+
+            data = resp.get_json()
+            self.assertEqual(data.get('status'), 'payment_required')
+            self.assertEqual(data.get('char_count'), 50001)
+            self.assertEqual(data.get('free_char_limit'), 50000)
+            self.assertEqual(data.get('unit_chars'), 10000)
+            self.assertEqual(data.get('unit_price_won'), 100)
+            self.assertEqual(data.get('required_units'), 1)
+            self.assertEqual(data.get('price_won'), 100)
+
+            file_id = str(fixed_uuid)
+            input_pdf_path = os.path.join(td, f"{file_id}_input.pdf")
+            output_pdf_path = os.path.join(td, f"{file_id}_output.pdf")
+            self.assertFalse(os.path.exists(input_pdf_path))
+            self.assertFalse(os.path.exists(output_pdf_path))
+
 
 if __name__ == '__main__':
     unittest.main()
-
