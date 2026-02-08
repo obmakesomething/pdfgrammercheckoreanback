@@ -71,39 +71,44 @@ class PDFHighlighterFitz:
 
                     # 첫 번째 일치 항목만 하이라이트
                     if text_instances:
-                        inst = text_instances[0]
+                        # 첫 번째 "성공하는" 일치 항목만 하이라이트 (PDF별로 quads 오류가 나기도 함)
+                        for inst in text_instances:
+                            # inst는 Rect(x0, y0, x1, y1) 형태
+                            # 패딩을 크게 줄여서 텍스트에 딱 맞게 조정
+                            adjusted_rect = fitz.Rect(
+                                inst.x0,
+                                inst.y0 + 3,  # 상단 패딩 많이 줄이기
+                                inst.x1,
+                                inst.y1 - 3   # 하단 패딩 많이 줄이기
+                            )
 
-                        # 텍스트의 실제 바운딩 박스를 구하기 위해 글자별 위치 확인
-                        # inst는 Rect(x0, y0, x1, y1) 형태
-                        # 패딩을 크게 줄여서 텍스트에 딱 맞게 조정
-                        adjusted_rect = fitz.Rect(
-                            inst.x0,
-                            inst.y0 + 3,  # 상단 패딩 많이 줄이기
-                            inst.x1,
-                            inst.y1 - 3   # 하단 패딩 많이 줄이기
-                        )
+                            try:
+                                highlight = page.add_highlight_annot(adjusted_rect)
+                                highlight.set_colors(stroke=color)
 
-                        # 하이라이트 추가 (조정된 사각형 사용)
-                        highlight = page.add_highlight_annot(adjusted_rect)
-                        highlight.set_colors(stroke=color)
+                                # 주석 내용 추가
+                                category_name = {
+                                    'SPACING': '띄어쓰기',
+                                    'SPELL': '맞춤법',
+                                    'GRAMMAR': '문법',
+                                    'TYPO': '오타'
+                                }.get(category, '기타')
 
-                        # 주석 내용 추가
-                        category_name = {
-                            'SPACING': '띄어쓰기',
-                            'SPELL': '맞춤법',
-                            'GRAMMAR': '문법',
-                            'TYPO': '오타'
-                        }.get(category, '기타')
+                                highlight.set_info(
+                                    title=f"맞춤법 검사기 ({category_name})",
+                                    content=f"틀림: {error['wrong']}\n올바름: {error['correct']}\n\n{error.get('help', '')}"
+                                )
+                                highlight.update()
 
-                        highlight.set_info(
-                            title=f"맞춤법 검사기 ({category_name})",
-                            content=f"틀림: {error['wrong']}\n올바름: {error['correct']}\n\n{error.get('help', '')}"
-                        )
-                        highlight.update()
-
-                        used_texts.add(wrong_word)
-                        total_highlights += 1
-                        found = True
+                                used_texts.add(wrong_word)
+                                total_highlights += 1
+                                found = True
+                                break
+                            except Exception as highlight_error:
+                                # Some PDFs can trigger MuPDF/quad errors on highlight creation.
+                                # Prefer returning a best-effort PDF (partial highlights) over a 5xx.
+                                print(f"하이라이트 추가 실패(무시): {highlight_error}")
+                                continue
 
             # PDF 저장
             doc.save(self.output_pdf_path)

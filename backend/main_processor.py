@@ -144,15 +144,50 @@ class GrammarCheckProcessor:
         """
         annotations = []
 
-        for error in errors:
-            # cleaned_text에서의 위치
-            cleaned_start = error.get('position', 0)
-            cleaned_end = cleaned_start + error.get('length', len(error['wrong']))
+        cleaned_text = getattr(preprocessor, 'cleaned_text', '') or ''
+        raw_text = getattr(preprocessor, 'raw_text', '') or ''
 
-            # 원본 위치로 역추적
-            original_indices = preprocessor.get_original_positions(
-                cleaned_start, cleaned_end
-            )
+        for error in errors:
+            wrong = (error.get('wrong') or '')
+            pos = int(error.get('position', 0) or 0)
+            length = int(error.get('length', len(wrong)) or len(wrong))
+
+            # Determine what coordinate system `pos` is in.
+            # - If we spell-check preprocessed text, pos refers to `cleaned_text`.
+            # - If we spell-check extracted raw text/paragraphs, pos refers to `raw_text`.
+            mode = None
+            if wrong and pos >= 0:
+                end = pos + len(wrong)
+                if end <= len(cleaned_text) and cleaned_text[pos:end] == wrong:
+                    mode = 'cleaned'
+                elif end <= len(raw_text) and raw_text[pos:end] == wrong:
+                    mode = 'raw'
+
+            cleaned_start = pos
+            cleaned_end = pos + max(0, length)
+
+            # Map to raw indices (text_with_positions indices).
+            original_indices = []
+            if mode == 'raw':
+                original_indices = list(
+                    range(
+                        cleaned_start,
+                        min(cleaned_end, len(text_with_positions))
+                    )
+                )
+            else:
+                # Default: treat as cleaned positions.
+                original_indices = preprocessor.get_original_positions(
+                    cleaned_start, cleaned_end
+                )
+                # If mapping fails, fall back to treating the position as raw.
+                if not original_indices:
+                    original_indices = list(
+                        range(
+                            cleaned_start,
+                            min(cleaned_end, len(text_with_positions))
+                        )
+                    )
 
             if original_indices and len(original_indices) > 0:
                 # 첫 번째 문자의 위치 정보 사용

@@ -86,8 +86,10 @@ class BareunSpellChecker:
             return errors
 
         except Exception as e:
+            # Don't silently treat upstream failures as "no errors found".
+            # The caller should decide whether to fail the request or fallback.
             print(f"바른 API 오류: {e}")
-            return []
+            raise
 
     def _parse_response(self, response, original_text: str) -> List[Dict]:
         """바른 API 응답 파싱"""
