@@ -15,7 +15,12 @@
 - `VITE_API_BASE_URL` (optional)
   - Default: `https://api.pdfgrammercheckorean.site`
 - `VITE_AD_GROUP_ID` (optional)
-  - If set, tries to show a full-screen ad before checking
+  - If set, tries to show a full-screen ad before revealing the result PDF (free docs only)
+
+## Pricing (Current Policy)
+
+- `<= 50,000자`: 광고 기반 무료
+- `> 50,000자`: 초과분 `10,000자당 100원` (백엔드가 `402 payment_required`로 응답)
 
 ## Commands
 
