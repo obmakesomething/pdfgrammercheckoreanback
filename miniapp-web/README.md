@@ -27,7 +27,7 @@ npm run build
 ```
 
 Build output:
-- `./pdfgrammercheckorean.ait` (gitignored)
+- `./pdgrammercheckorean.ait` (gitignored)
 
 Deploy:
 ```bash
@@ -38,4 +38,3 @@ npm run deploy
 
 - Set a real app icon URL in `./granite.config.ts` before review.
 - Add only the permissions you actually use (currently empty).
-

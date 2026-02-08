@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "granite dev",
-    "build": "granite build",
+    "build": "granite build && node scripts/rename-artifact.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "ait deploy",
+    "deploy": "npm run build && ait deploy --location pdgrammercheckorean.ait",
     "test": "vitest run",
     "test:watch": "vitest"
   },
