@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import Script from 'next/script'
+import ServiceShutdownOverlay from '@/components/ServiceShutdownOverlay'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -77,7 +78,10 @@ export default function RootLayout({
           strategy="beforeInteractive"
         />
       </head>
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <ServiceShutdownOverlay />
+        {children}
+      </body>
     </html>
   )
 }
