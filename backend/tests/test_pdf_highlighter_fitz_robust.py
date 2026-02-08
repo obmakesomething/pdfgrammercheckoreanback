@@ -10,6 +10,10 @@ import pdf_highlighter_fitz
 
 
 class _DummyPage:
+    def search_for(self, text):
+        # Return a dummy rect-like object with x0/y0/x1/y1 attributes.
+        return [pdf_highlighter_fitz.fitz.Rect(0, 0, 10, 10)]
+
     def add_highlight_annot(self, rect):
         raise ValueError('bad quads entry')
 
@@ -42,16 +46,12 @@ class TestPDFHighlighterFitzRobust(unittest.TestCase):
             'correct': '돼요',
             'help': '...',
             'category': 'SPELL',
-            'page': 1,
-            'bbox': [0, 0, 1, 1],
         }]
 
         highlighter = pdf_highlighter_fitz.PDFHighlighterFitz('in.pdf', 'out.pdf')
 
         with patch.object(pdf_highlighter_fitz.fitz, 'open', return_value=dummy_doc):
-            # Force a non-None rect so we hit add_highlight_annot.
-            with patch.object(pdf_highlighter_fitz.PDFHighlighterFitz, '_rect_from_annotation', return_value=object()):
-                highlighter.add_highlights(errors, text_positions=None)
+            highlighter.add_highlights(errors)
 
         self.assertEqual(dummy_doc.saved_path, 'out.pdf')
         self.assertTrue(dummy_doc.closed)

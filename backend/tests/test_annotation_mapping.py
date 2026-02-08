@@ -51,9 +51,10 @@ class TestAnnotationMapping(unittest.TestCase):
         self.assertEqual(len(annotations), 1)
         ann = annotations[0]
 
-        # We expect the annotation to resolve to the bbox of 'b' (raw index 3).
+        # We expect the annotation to resolve to the position of 'b' (raw index 3).
         self.assertEqual(ann['page'], 1)
-        self.assertIsNotNone(ann.get('bbox'))
+        self.assertEqual(ann.get('x'), 3.0)
+        self.assertEqual(ann.get('y'), 0.0)
 
     def test_create_annotations_accepts_cleaned_positions(self):
         raw_text = 'a-\nb'
@@ -79,7 +80,8 @@ class TestAnnotationMapping(unittest.TestCase):
         self.assertEqual(len(annotations), 1)
         ann = annotations[0]
         self.assertEqual(ann['page'], 1)
-        self.assertIsNotNone(ann.get('bbox'))
+        self.assertEqual(ann.get('x'), 3.0)
+        self.assertEqual(ann.get('y'), 0.0)
 
 
 if __name__ == '__main__':
