@@ -102,6 +102,7 @@ describe('checkPdf', () => {
           unit_price_won: 100,
           required_units: 1,
           price_won: 100,
+          credits_balance: 3,
         }),
         {
           status: 402,
@@ -127,5 +128,37 @@ describe('checkPdf', () => {
     expect(result.unitPriceWon).toBe(100)
     expect(result.requiredUnits).toBe(1)
     expect(result.priceWon).toBe(100)
+    expect(result.creditsBalance).toBe(3)
+  })
+
+  it('includes device_id form field when deviceId is provided', async () => {
+    const file = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], 'input.pdf', {
+      type: 'application/pdf',
+    })
+
+    const mockFetch: typeof fetch = async (_url, init) => {
+      const body = init?.body as unknown
+      expect(body).toBeInstanceOf(FormData)
+      const form = body as FormData
+      expect(form.get('device_id')).toBe('device-1')
+
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'X-Errors-Found': '0',
+          'Content-Disposition': 'attachment; filename="grammar_checked.pdf"',
+        },
+      })
+    }
+
+    const result = await checkPdf({
+      apiBaseUrl: 'https://api.example.com',
+      file,
+      deviceId: 'device-1',
+      fetchImpl: mockFetch,
+    })
+
+    expect(result.type).toBe('ok')
   })
 })

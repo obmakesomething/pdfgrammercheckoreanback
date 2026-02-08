@@ -111,7 +111,14 @@ class GrammarCheckProcessor:
             'charge_basis': charge_basis,
         }
 
-    def process(self, input_pdf_path: str, output_pdf_path: str = None) -> dict:
+    def process(
+        self,
+        input_pdf_path: str,
+        output_pdf_path: str = None,
+        *,
+        user_id: str = None,
+        credits_storage=None,
+    ) -> dict:
         """
         PDF 맞춤법 검사 전체 프로세스 실행
 
@@ -133,6 +140,9 @@ class GrammarCheckProcessor:
         print("=" * 70)
 
         try:
+            reserved = None
+            credits_to_consume = 0
+
             # 1단계: PDF 텍스트 추출 (파라그래프 단위)
             print("\n[1/5] PDF 텍스트 추출 중 (파라그래프 단위)...")
             extractor = SimplePDFExtractor(input_pdf_path)
@@ -147,20 +157,61 @@ class GrammarCheckProcessor:
             char_count = self._count_chars_for_pricing(raw_text or '', pricing_cfg.get('count_basis'))
             quote = self._quote_char_pricing(char_count, pricing_cfg)
 
-            if pricing_cfg.get('enabled') and char_count > int(quote.get('free_char_limit', 0) or 0):
-                msg = (
-                    f"무료 한도({quote.get('free_char_limit')}자)를 초과했습니다. "
-                    f"초과분 10,000자당 {quote.get('unit_price_won')}원 결제가 필요합니다."
-                )
-                print(f"  ⚠ {msg} (chars={char_count})")
-                return {
-                    'success': False,
-                    'errors_found': 0,
-                    'output_pdf': None,
-                    'message': msg,
-                    'code': 'PAYMENT_REQUIRED',
-                    **quote,
-                }
+            pricing_enabled = bool(pricing_cfg.get('enabled'))
+            free_char_limit = int(quote.get('free_char_limit', 0) or 0)
+            credits_to_consume = int(quote.get('required_units', 0) or 0)
+            is_paid_doc = pricing_enabled and char_count > free_char_limit and credits_to_consume > 0
+
+            if is_paid_doc:
+                balance = 0
+                if user_id and credits_storage:
+                    try:
+                        balance = int(credits_storage.get_balance(user_id))
+                    except Exception:
+                        balance = 0
+
+                if balance < credits_to_consume:
+                    msg = (
+                        f"무료 한도({free_char_limit}자)를 초과했습니다. "
+                        f"초과분 10,000자당 {quote.get('unit_price_won')}원 결제가 필요합니다."
+                    )
+                    print(f"  ⚠ {msg} (chars={char_count})")
+                    return {
+                        'success': False,
+                        'errors_found': 0,
+                        'output_pdf': None,
+                        'message': msg,
+                        'code': 'PAYMENT_REQUIRED',
+                        'credits_balance': balance,
+                        **quote,
+                    }
+
+                try:
+                    reserved = credits_storage.consume_credits(user_id, credits_to_consume)
+                except Exception:
+                    reserved = None
+
+                if not reserved or not reserved.get('consumed'):
+                    bal2 = balance
+                    if user_id and credits_storage:
+                        try:
+                            bal2 = int(credits_storage.get_balance(user_id))
+                        except Exception:
+                            bal2 = balance
+                    msg = (
+                        f"무료 한도({free_char_limit}자)를 초과했습니다. "
+                        f"초과분 10,000자당 {quote.get('unit_price_won')}원 결제가 필요합니다."
+                    )
+                    print(f"  ⚠ {msg} (chars={char_count})")
+                    return {
+                        'success': False,
+                        'errors_found': 0,
+                        'output_pdf': None,
+                        'message': msg,
+                        'code': 'PAYMENT_REQUIRED',
+                        'credits_balance': bal2,
+                        **quote,
+                    }
 
             # 2단계: 텍스트 전처리 (앵커 매핑)
             print("\n[2/5] 텍스트 전처리 중...")
@@ -182,6 +233,8 @@ class GrammarCheckProcessor:
                     'output_pdf': None,
                     'message': '맞춤법 오류가 발견되지 않았습니다.',
                     'char_count': char_count,
+                    'credits_used': credits_to_consume if is_paid_doc else 0,
+                    'credits_balance': reserved.get('balance') if reserved else None,
                 }
 
             # 4단계: 앵커 역추적 (오류 위치를 원본 PDF 위치로)
@@ -225,9 +278,17 @@ class GrammarCheckProcessor:
                 'annotations': annotations,
                 'message': f'{len(annotations)}개의 맞춤법 오류를 발견했습니다.',
                 'char_count': char_count,
+                'credits_used': credits_to_consume if is_paid_doc else 0,
+                'credits_balance': reserved.get('balance') if reserved else None,
             }
 
         except Exception as e:
+            # Refund reserved credits on failure.
+            try:
+                if reserved and reserved.get('consumed') and user_id and credits_storage and credits_to_consume > 0:
+                    credits_storage.add_credits(user_id=user_id, credits=credits_to_consume, reason='refund')
+            except Exception:
+                pass
             print(f"\n✗ 오류 발생: {e}")
             import traceback
             traceback.print_exc()

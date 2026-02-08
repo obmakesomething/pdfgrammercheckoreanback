@@ -16,7 +16,10 @@ from main_processor import GrammarCheckProcessor
 from email_sender import EmailSender
 from toss_payments import TossPayments
 from payment_storage import PaymentStorage
+from credits_storage import CreditsStorage
 from dotenv import load_dotenv
+import json
+import re
 
 # 환경 변수 로드
 load_dotenv()
@@ -32,9 +35,48 @@ email_sender = EmailSender()
 toss_payments = TossPayments()
 payment_storage = PaymentStorage()
 
+# Credits storage (Apps in Toss IAP)
+credits_db_path = os.getenv('CREDITS_DB_PATH', os.path.join('data', 'credits.sqlite3'))
+credits_storage = CreditsStorage(credits_db_path)
+
 # 상품 정보 (환경변수에서 가져오거나 기본값 사용)
 PRODUCT_AMOUNT = int(os.getenv('PRODUCT_AMOUNT', '3900'))  # 기본 3,900원
 PRODUCT_NAME = os.getenv('PRODUCT_NAME', 'PDF 맞춤법 검사 프리미엄')
+
+def _get_iap_sku_credits_map() -> dict:
+    raw = (os.getenv('IAP_SKU_CREDITS_JSON') or '').strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {}
+
+
+def _infer_credits_from_sku(sku: str) -> int:
+    """Fallback: infer credits from SKU name like CREDIT_5 -> 5."""
+    if not sku:
+        return 0
+    m = re.search(r'(\\d+)', sku)
+    if not m:
+        return 1
+    try:
+        return max(1, int(m.group(1)))
+    except Exception:
+        return 1
+
+
+def _credits_for_sku(sku: str) -> int:
+    mapping = _get_iap_sku_credits_map()
+    if sku in mapping:
+        try:
+            return max(0, int(mapping[sku]))
+        except Exception:
+            return 0
+    return _infer_credits_from_sku(sku)
 
 
 @app.route('/health', methods=['GET'])
@@ -43,6 +85,61 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'PDF Grammar Checker'
+    }), 200
+
+
+@app.route('/api/credits/balance', methods=['GET'])
+def credits_balance():
+    user_id = (request.args.get('user_id') or '').strip()
+    if not user_id:
+        return jsonify({
+            'status': 'error',
+            'message': 'user_id가 필요합니다',
+        }), 400
+
+    try:
+        balance = int(credits_storage.get_balance(user_id))
+    except Exception:
+        balance = 0
+
+    return jsonify({
+        'status': 'success',
+        'balance': balance,
+    }), 200
+
+
+@app.route('/api/iap/grant', methods=['POST'])
+def iap_grant():
+    data = request.get_json(silent=True) or {}
+    user_id = (data.get('user_id') or '').strip()
+    order_id = (data.get('order_id') or '').strip()
+    sku = (data.get('sku') or '').strip()
+
+    if not user_id or not order_id or not sku:
+        return jsonify({
+            'status': 'error',
+            'message': 'user_id, order_id, sku가 필요합니다',
+        }), 400
+
+    credits = _credits_for_sku(sku)
+    if credits <= 0:
+        return jsonify({
+            'status': 'error',
+            'message': '유효하지 않은 sku입니다',
+        }), 400
+
+    result = credits_storage.grant_iap_order(
+        user_id=user_id,
+        order_id=order_id,
+        sku=sku,
+        credits=credits,
+    )
+
+    return jsonify({
+        'status': 'success',
+        'granted': bool(result.get('granted')),
+        'credits_added': int(result.get('credits_added', 0) or 0),
+        'balance': int(result.get('balance', 0) or 0),
     }), 200
 
 
@@ -74,6 +171,10 @@ def check_pdf():
         pdf_file = request.files['pdf']
         # Email is optional (we're moving to miniapp flows and should avoid collecting PII by default).
         email = (request.form.get('email') or '').strip()
+        # Pseudonymous device id for credits. Optional.
+        user_id = (request.form.get('device_id') or '').strip()
+        if not user_id:
+            user_id = None
 
         # 파일명 검증
         if pdf_file.filename == '':
@@ -118,7 +219,12 @@ def check_pdf():
         print(f"임시 파일 저장: {input_pdf_path}")
 
         # 3. 맞춤법 검사 실행
-        result = processor.process(input_pdf_path, output_pdf_path)
+        result = processor.process(
+            input_pdf_path,
+            output_pdf_path,
+            user_id=user_id,
+            credits_storage=credits_storage,
+        )
 
         # 3-1. 결제 필요(무료 한도 초과) 응답
         if result.get('code') == 'PAYMENT_REQUIRED':
@@ -140,6 +246,7 @@ def check_pdf():
                 'unit_price_won': result.get('unit_price_won', 0),
                 'required_units': result.get('required_units', 0),
                 'price_won': result.get('price_won', 0),
+                'credits_balance': result.get('credits_balance', 0),
             }), 402
 
         # 4. (Optional) store request metadata.

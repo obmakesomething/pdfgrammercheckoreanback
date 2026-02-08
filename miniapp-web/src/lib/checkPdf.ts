@@ -84,6 +84,7 @@ export type CheckPdfPaymentRequiredResult = {
   unitPriceWon: number
   requiredUnits: number
   priceWon: number
+  creditsBalance: number
 }
 
 export type CheckPdfResult = CheckPdfOkResult | CheckPdfPaymentRequiredResult
@@ -102,20 +103,25 @@ function parsePaymentRequiredJson(data: unknown): CheckPdfPaymentRequiredResult 
     unitPriceWon: toInt(record.unit_price_won, 0),
     requiredUnits: toInt(record.required_units, 0),
     priceWon: toInt(record.price_won, 0),
+    creditsBalance: toInt(record.credits_balance, 0),
   }
 }
 
 type CheckPdfParams = {
   apiBaseUrl: string
   file: File
+  deviceId?: string
   fetchImpl?: typeof fetch
 }
 
-export async function checkPdf({ apiBaseUrl, file, fetchImpl = fetch }: CheckPdfParams): Promise<CheckPdfResult> {
+export async function checkPdf({ apiBaseUrl, file, deviceId, fetchImpl = fetch }: CheckPdfParams): Promise<CheckPdfResult> {
   const url = new URL('/api/check-pdf', apiBaseUrl)
 
   const formData = new FormData()
   formData.append('pdf', file, file.name || 'input.pdf')
+  if (deviceId) {
+    formData.append('device_id', deviceId)
+  }
 
   const response = await fetchImpl(url.toString(), {
     method: 'POST',

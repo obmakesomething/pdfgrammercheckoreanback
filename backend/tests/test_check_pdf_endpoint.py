@@ -51,7 +51,7 @@ class TestCheckPdfEndpoint(unittest.TestCase):
 
             fixed_uuid = app_mod.uuid.UUID('00000000-0000-0000-0000-000000000000')
 
-            def _fake_process(input_path, output_path):
+            def _fake_process(input_path, output_path, **_kwargs):
                 return {
                     'success': True,
                     'errors_found': 0,
@@ -83,7 +83,7 @@ class TestCheckPdfEndpoint(unittest.TestCase):
 
             fixed_uuid = app_mod.uuid.UUID('00000000-0000-0000-0000-000000000000')
 
-            def _fake_process(input_path, output_path):
+            def _fake_process(input_path, output_path, **_kwargs):
                 # Create a dummy output so the handler can return it.
                 with open(output_path, 'wb') as f:
                     f.write(b'%PDF-1.4\n%FAKE\n')
@@ -117,7 +117,7 @@ class TestCheckPdfEndpoint(unittest.TestCase):
 
             fixed_uuid = app_mod.uuid.UUID('00000000-0000-0000-0000-000000000000')
 
-            def _fake_process(input_path, output_path):
+            def _fake_process(input_path, output_path, **_kwargs):
                 return {
                     'success': True,
                     'errors_found': 0,
@@ -154,7 +154,7 @@ class TestCheckPdfEndpoint(unittest.TestCase):
 
             fixed_uuid = app_mod.uuid.UUID('00000000-0000-0000-0000-000000000000')
 
-            def _fake_process(input_path, output_path):
+            def _fake_process(input_path, output_path, **_kwargs):
                 return {
                     'success': False,
                     'code': 'PAYMENT_REQUIRED',

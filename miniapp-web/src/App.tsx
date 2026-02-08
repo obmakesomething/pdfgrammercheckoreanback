@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from 'react'
-import { saveBase64Data, showFullScreenAd } from '@apps-in-toss/web-framework'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { IAP, getDeviceId, saveBase64Data, showFullScreenAd, type IapProductListItem } from '@apps-in-toss/web-framework'
 import { checkPdf, uint8ArrayToBase64 } from './lib/checkPdf'
+import { fetchCreditsBalance, grantIapOrder } from './lib/credits'
 
 const DEFAULT_API_BASE_URL = 'https://api.pdfgrammercheckorean.site'
 const MAX_PDF_SIZE_MB = 20
@@ -14,6 +15,7 @@ type PaywallInfo = {
   unitPriceWon: number
   requiredUnits: number
   priceWon: number
+  creditsBalance: number
 }
 
 function formatBytes(bytes: number): string {
@@ -67,6 +69,12 @@ function App() {
   const [message, setMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [paywall, setPaywall] = useState<PaywallInfo | null>(null)
+  const [deviceId, setDeviceId] = useState<string | null>(null)
+  const [creditsBalance, setCreditsBalance] = useState<number | null>(null)
+  const [iapProducts, setIapProducts] = useState<IapProductListItem[] | null>(null)
+  const [iapLoading, setIapLoading] = useState(false)
+  const [iapError, setIapError] = useState<string | null>(null)
+  const [purchasingSku, setPurchasingSku] = useState<string | null>(null)
 
   const resultBytesRef = useRef<Uint8Array | null>(null)
   const resultFileNameRef = useRef<string>('grammar_checked.pdf')
@@ -82,6 +90,9 @@ function App() {
     setErrorsFound(null)
     setMessage(null)
     setPaywall(null)
+    setCreditsBalance(null)
+    setIapProducts(null)
+    setIapError(null)
     resultBytesRef.current = null
     resultFileNameRef.current = 'grammar_checked.pdf'
 
@@ -99,12 +110,15 @@ function App() {
     setMessage(null)
     setErrorsFound(null)
     setPaywall(null)
+    setIapProducts(null)
+    setIapError(null)
     resultBytesRef.current = null
 
     try {
       const result = await checkPdf({
         apiBaseUrl,
         file: selectedFile,
+        deviceId: deviceId || undefined,
       })
 
       if (result.type === 'payment_required') {
@@ -117,8 +131,10 @@ function App() {
           unitPriceWon: result.unitPriceWon,
           requiredUnits: result.requiredUnits,
           priceWon: result.priceWon,
+          creditsBalance: result.creditsBalance,
         })
         setMessage(result.message)
+        setCreditsBalance(result.creditsBalance)
         return
       }
 
@@ -188,6 +204,131 @@ function App() {
   }
 
   const reset = () => handleSelectFile(null)
+
+  useEffect(() => {
+    // `getDeviceId()` is used as a pseudonymous key for credit balance.
+    try {
+      const id = getDeviceId()
+      if (id) setDeviceId(id)
+    } catch {
+      // ignore (local dev / unsupported env)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!paywall) return
+    if (!deviceId) return
+
+    let cancelled = false
+
+    const loadBalance = async () => {
+      try {
+        const bal = await fetchCreditsBalance({ apiBaseUrl, userId: deviceId })
+        if (cancelled) return
+        setCreditsBalance(bal)
+      } catch (err) {
+        if (cancelled) return
+        const msg = err instanceof Error ? err.message : '크레딧 정보를 불러오지 못했습니다.'
+        setIapError(msg)
+      }
+    }
+
+    const loadProducts = async () => {
+      setIapLoading(true)
+      setIapError(null)
+      try {
+        const list = await IAP.getProductItemList()
+        if (cancelled) return
+        if (!list) {
+          setIapProducts([])
+          setIapError('현재 토스 앱 버전에서는 인앱 결제를 지원하지 않아요. 앱 업데이트 후 다시 시도해주세요.')
+          return
+        }
+        setIapProducts(list.products || [])
+      } catch (err) {
+        if (cancelled) return
+        const msg = err instanceof Error ? err.message : '인앱 결제 상품을 불러오지 못했습니다.'
+        setIapError(msg)
+        setIapProducts([])
+      } finally {
+        if (!cancelled) setIapLoading(false)
+      }
+    }
+
+    void loadBalance()
+    void loadProducts()
+
+    return () => {
+      cancelled = true
+    }
+  }, [paywall, deviceId, apiBaseUrl])
+
+  const handlePurchase = async (sku: string) => {
+    if (!deviceId) {
+      setMessage('기기 정보를 가져올 수 없어 결제를 진행할 수 없어요.')
+      return
+    }
+
+    setPurchasingSku(sku)
+    setMessage(null)
+
+    let cleanup: (() => void) | undefined
+
+    try {
+      cleanup = IAP.createOneTimePurchaseOrder({
+        options: {
+          sku,
+          processProductGrant: async ({ orderId }) => {
+            try {
+              await grantIapOrder({
+                apiBaseUrl,
+                userId: deviceId,
+                orderId,
+                sku,
+              })
+              try {
+                await IAP.completeProductGrant({ params: { orderId } })
+              } catch {
+                // ignore (older app versions may not support it)
+              }
+              return true
+            } catch {
+              return false
+            }
+          },
+        },
+        onEvent: async (event) => {
+          if (event.type !== 'success') return
+
+          try {
+            const bal = await fetchCreditsBalance({ apiBaseUrl, userId: deviceId })
+            setCreditsBalance(bal)
+            if (paywall && selectedFile && bal >= paywall.requiredUnits) {
+              // Auto-retry once credits are sufficient.
+              void handleCheck()
+            }
+          } catch {
+            // ignore
+          } finally {
+            setPurchasingSku(null)
+            cleanup?.()
+            setMessage('크레딧 구매가 완료되었습니다.')
+          }
+        },
+        onError: (error) => {
+          const msg = error instanceof Error ? error.message : '결제 중 오류가 발생했습니다.'
+          setPurchasingSku(null)
+          cleanup?.()
+          setMessage(msg)
+        },
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '결제 요청에 실패했습니다.'
+      setPurchasingSku(null)
+      cleanup?.()
+      setMessage(msg)
+    }
+  }
 
   return (
     <div className="app">
@@ -273,15 +414,68 @@ function App() {
                 </div>
               </div>
               <div className="resultItem">
-                <div className="resultLabel">예상 결제</div>
+                <div className="resultLabel">필요 크레딧</div>
                 <div className="resultValue">
-                  {paywall.priceWon.toLocaleString()}원
+                  {paywall.requiredUnits.toLocaleString()}개
                 </div>
               </div>
             </div>
 
             <div className="notice info" role="note">
               50,000자까지는 광고 시청 후 무료입니다. 초과분은 10,000자당 100원으로 계산됩니다.
+            </div>
+
+            <div className="resultGrid">
+              <div className="resultItem">
+                <div className="resultLabel">내 크레딧</div>
+                <div className="resultValue">
+                  {(creditsBalance ?? 0).toLocaleString()}개
+                </div>
+              </div>
+              <div className="resultItem">
+                <div className="resultLabel">부족 크레딧</div>
+                <div className="resultValue">
+                  {Math.max(0, paywall.requiredUnits - (creditsBalance ?? 0)).toLocaleString()}개
+                </div>
+              </div>
+            </div>
+
+            <div className="productSection" aria-label="크레딧 구매">
+              <div className="labelRow">
+                <span className="label">크레딧 구매</span>
+                {iapLoading && <span className="meta">불러오는 중...</span>}
+              </div>
+
+              {iapError && (
+                <div className="notice error" role="alert">
+                  {iapError}
+                </div>
+              )}
+
+              {iapProducts && iapProducts.length > 0 ? (
+                <div className="productList">
+                  {iapProducts.map((p) => (
+                    <div key={p.sku} className="productRow">
+                      <div className="productMeta">
+                        <div className="productName">{p.displayName}</div>
+                        <div className="productDesc">{p.description}</div>
+                      </div>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        onClick={() => handlePurchase(p.sku)}
+                        disabled={Boolean(purchasingSku)}
+                      >
+                        {purchasingSku === p.sku ? '결제 중...' : `${p.displayAmount} 구매`}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="hint">
+                  인앱 결제 상품이 없습니다. 콘솔에서 IAP 상품(SKU)을 등록해주세요.
+                </div>
+              )}
             </div>
 
             <button
