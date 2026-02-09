@@ -158,6 +158,203 @@ def health_check():
     }), 200
 
 
+def _legal_html_page(title: str, body_html: str, updated_at: str) -> str:
+    # Minimal, self-contained HTML page for Apps in Toss review docs.
+    return f"""<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{title} | PDF 맞춤법 검사기</title>
+    <style>
+      :root {{
+        --bg: #f6f7fb;
+        --card: #ffffff;
+        --text: #111827;
+        --muted: #6b7280;
+        --accent: #2563eb;
+        --border: #e5e7eb;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", Helvetica, Arial, "Apple Color Emoji",
+          "Segoe UI Emoji";
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+      }}
+      .wrap {{
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 24px;
+      }}
+      .card {{
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 28px;
+        box-shadow: 0 8px 18px rgba(17, 24, 39, 0.06);
+      }}
+      h1 {{
+        margin: 0 0 6px 0;
+        font-size: 28px;
+        letter-spacing: -0.02em;
+      }}
+      .meta {{
+        margin: 0 0 18px 0;
+        color: var(--muted);
+        font-size: 13px;
+      }}
+      h2 {{
+        margin: 26px 0 10px 0;
+        font-size: 18px;
+        color: var(--accent);
+      }}
+      p {{ margin: 10px 0; }}
+      ul {{ margin: 10px 0 10px 22px; }}
+      li {{ margin: 6px 0; }}
+      .note {{
+        margin: 14px 0;
+        padding: 12px 14px;
+        border-left: 4px solid var(--accent);
+        background: #eff6ff;
+        border-radius: 10px;
+      }}
+      code {{
+        background: #f3f4f6;
+        padding: 0 6px;
+        border-radius: 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 0.95em;
+      }}
+      a {{ color: var(--accent); }}
+      .footer {{
+        margin-top: 22px;
+        color: var(--muted);
+        font-size: 12px;
+      }}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>{title}</h1>
+        <p class="meta">최종 수정일: {updated_at}</p>
+        {body_html}
+        <p class="footer">본 문서는 Apps in Toss 미니앱(앱명: <code>pdfgrammercheckorean</code>) 서비스 운영을 위한 고지 문서입니다.</p>
+      </div>
+    </div>
+  </body>
+</html>
+"""
+
+
+@app.route('/legal/terms', methods=['GET'])
+def legal_terms():
+    updated_at = os.getenv('LEGAL_LAST_UPDATED', '2026년 2월 9일')
+    contact_email = os.getenv('LEGAL_CONTACT_EMAIL', os.getenv('RESEND_FROM_EMAIL', 'noreply@pdfgrammercheckorean.site'))
+
+    body = f"""
+        <h2>1. 목적</h2>
+        <p>본 약관은 PDF 맞춤법 검사기(이하 “서비스”)의 이용 조건 및 절차, 서비스 제공자와 이용자의 권리/의무/책임사항을 규정합니다.</p>
+
+        <h2>2. 서비스 내용</h2>
+        <ul>
+          <li>이용자가 업로드한 PDF에서 텍스트를 추출하여 한국어 맞춤법/문법 검사를 수행합니다.</li>
+          <li>검사 결과는 오류 표시(하이라이트/주석)가 포함된 PDF로 제공될 수 있습니다.</li>
+        </ul>
+
+        <h2>3. 유료/무료 정책</h2>
+        <div class="note">
+          <p><strong>무료 구간</strong>: 문서당 문자수(공백 제외 기준)가 <code>50,000자 이하</code>인 경우 무료로 제공되며, 일부 화면에서 광고가 노출될 수 있습니다.</p>
+          <p><strong>유료 구간</strong>: <code>50,000자 초과</code> 문서는 초과분에 대해 <code>10,000자당 100원</code> 기준으로 크레딧이 차감됩니다. (예: 초과분 1~10,000자 = 1크레딧)</p>
+        </div>
+        <p>유료 결제는 Apps in Toss 인앱결제(IAP)로 제공되는 크레딧 구매 형태로 진행됩니다.</p>
+
+        <h2>4. 이용자의 의무</h2>
+        <ul>
+          <li>타인의 권리를 침해하는 문서, 불법/유해 콘텐츠 업로드 등 관련 법령을 위반하는 행위를 하지 않아야 합니다.</li>
+          <li>서비스의 정상 동작을 방해하는 행위(과도한 요청, 취약점 악용 등)를 하지 않아야 합니다.</li>
+        </ul>
+
+        <h2>5. 파일 처리 및 보안</h2>
+        <ul>
+          <li>업로드된 PDF는 처리에 필요한 기간 동안만 서버에 임시 저장되며, 처리 완료 후 즉시 삭제를 원칙으로 합니다.</li>
+          <li>서비스는 기능 제공을 위해 외부 맞춤법 API로 텍스트를 전송할 수 있습니다(개인정보 최소화).</li>
+        </ul>
+
+        <h2>6. 면책</h2>
+        <ul>
+          <li>검사 결과의 정확성은 보장되지 않으며, 최종 판단과 책임은 이용자에게 있습니다.</li>
+          <li>천재지변/장애/점검 등 불가항력 사유로 인한 서비스 중단에 대해 책임을 지지 않습니다.</li>
+        </ul>
+
+        <h2>7. 문의</h2>
+        <p>서비스 관련 문의: <a href="mailto:{contact_email}">{contact_email}</a></p>
+    """
+
+    html = _legal_html_page('서비스 이용약관', body, updated_at)
+    resp = make_response(html)
+    resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+    return resp
+
+
+@app.route('/legal/privacy', methods=['GET'])
+def legal_privacy():
+    updated_at = os.getenv('LEGAL_LAST_UPDATED', '2026년 2월 9일')
+    contact_email = os.getenv('LEGAL_CONTACT_EMAIL', os.getenv('RESEND_FROM_EMAIL', 'noreply@pdfgrammercheckorean.site'))
+
+    body = f"""
+        <h2>1. 수집하는 정보</h2>
+        <p>서비스는 기능 제공을 위해 다음 정보를 처리할 수 있습니다.</p>
+        <ul>
+          <li><strong>기기 식별자(가명 처리)</strong>: 크레딧 잔액/차감 처리 및 결제 내역 중복 처리 방지</li>
+          <li><strong>IAP 주문 정보</strong>: order id, 상품 SKU(중복 결제 방지 및 크레딧 지급)</li>
+          <li><strong>서비스 로그</strong>: 오류 진단/부정 이용 방지 목적의 최소 로그(개인정보 최소화)</li>
+        </ul>
+        <p>서비스는 원칙적으로 이름/이메일/성별 등 실명 기반 개인정보를 입력받지 않습니다.</p>
+
+        <h2>2. 업로드 파일 처리</h2>
+        <div class="note">
+          <ul>
+            <li>업로드된 PDF는 처리 중에만 임시 저장되며 처리 완료 후 즉시 삭제를 원칙으로 합니다.</li>
+            <li>PDF에서 추출된 텍스트는 맞춤법 검사를 위해 외부 API로 전송될 수 있습니다.</li>
+            <li>서비스 제공 목적 외로 문서 내용을 저장/판매/공유하지 않습니다.</li>
+          </ul>
+        </div>
+
+        <h2>3. 제3자 제공/처리위탁</h2>
+        <p>서비스 제공을 위해 다음과 같은 외부 서비스가 사용될 수 있습니다.</p>
+        <ul>
+          <li>맞춤법 검사: 바른(Bareun) API 등</li>
+          <li>인프라: Railway(서버 호스팅)</li>
+          <li>결제/광고: Apps in Toss 제공 IAP/광고 기능</li>
+        </ul>
+
+        <h2>4. 보유 및 파기</h2>
+        <ul>
+          <li>업로드된 파일: 처리 완료 후 즉시 삭제를 원칙으로 합니다.</li>
+          <li>크레딧/결제 중복 방지용 식별 정보 및 주문 ID: 서비스 운영/정산 및 부정 이용 방지를 위해 필요한 기간 동안 보관될 수 있습니다.</li>
+        </ul>
+
+        <h2>5. 이용자 권리</h2>
+        <ul>
+          <li>연결 끊기(회원 탈퇴) 시 서비스는 보유 중인 크레딧 관련 정보를 삭제할 수 있습니다.</li>
+          <li>개인정보 관련 문의는 아래 이메일로 접수할 수 있습니다.</li>
+        </ul>
+
+        <h2>6. 문의</h2>
+        <p>개인정보 관련 문의: <a href="mailto:{contact_email}">{contact_email}</a></p>
+    """
+
+    html = _legal_html_page('개인정보 처리방침', body, updated_at)
+    resp = make_response(html)
+    resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+    return resp
+
+
 @app.route('/api/credits/balance', methods=['GET'])
 def credits_balance():
     user_id = (request.args.get('user_id') or '').strip()
