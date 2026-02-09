@@ -28,7 +28,9 @@ from typing import Optional, Tuple
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # CORS 허용
+# CORS: Toss 콘솔 테스트(브라우저 fetch)에서 Basic Auth/credentials 옵션이 켜져도
+# "Failed to fetch"로 막히지 않도록 credentials 허용.
+CORS(app, supports_credentials=True)  # CORS 허용
 
 # 프로세서 및 이메일 발송기 초기화
 processor = GrammarCheckProcessor()
@@ -100,6 +102,22 @@ def _expected_disconnect_basic_auth() -> Optional[Tuple[str, str]]:
 def _parse_basic_auth(authorization: Optional[str]) -> Optional[Tuple[str, str]]:
     if not authorization:
         return None
+
+    # Some consoles may provide only "user:pass" or only "<base64(user:pass)>"
+    # as the header value. Accept those as well to reduce integration friction.
+    raw = authorization.strip()
+    if raw and ' ' not in raw:
+        if ':' in raw:
+            u, p = raw.split(':', 1)
+            return (u, p)
+        try:
+            decoded = base64.b64decode(raw).decode('utf-8')
+        except Exception:
+            decoded = None
+        if decoded and ':' in decoded:
+            u, p = decoded.split(':', 1)
+            return (u, p)
+
     parts = authorization.split(' ', 1)
     if len(parts) != 2:
         return None
