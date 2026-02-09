@@ -7,6 +7,8 @@ PDF 맞춤법 검사 API 제공
 from flask import Flask, request, jsonify, send_file, make_response
 from flask_cors import CORS
 import os
+import base64
+import hmac
 import tempfile
 import uuid
 import csv
@@ -20,6 +22,7 @@ from credits_storage import CreditsStorage
 from dotenv import load_dotenv
 import json
 import re
+from typing import Optional, Tuple
 
 # 환경 변수 로드
 load_dotenv()
@@ -77,6 +80,50 @@ def _credits_for_sku(sku: str) -> int:
         except Exception:
             return 0
     return _infer_credits_from_sku(sku)
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().lower() in ('1', 'true', 'yes', 'y', 'on')
+
+
+def _expected_disconnect_basic_auth() -> Optional[Tuple[str, str]]:
+    user = (os.getenv('TOSS_DISCONNECT_BASIC_AUTH_USER') or '').strip()
+    pw = (os.getenv('TOSS_DISCONNECT_BASIC_AUTH_PASS') or '').strip()
+    if not user and not pw:
+        return None
+    return (user, pw)
+
+
+def _parse_basic_auth(authorization: Optional[str]) -> Optional[Tuple[str, str]]:
+    if not authorization:
+        return None
+    parts = authorization.split(' ', 1)
+    if len(parts) != 2:
+        return None
+    if parts[0].lower() != 'basic':
+        return None
+    token = parts[1].strip()
+    if not token:
+        return None
+    try:
+        decoded = base64.b64decode(token).decode('utf-8')
+    except Exception:
+        return None
+    if ':' in decoded:
+        u, p = decoded.split(':', 1)
+        return (u, p)
+    return (decoded, '')
+
+
+def _verify_basic_auth(authorization: Optional[str], expected_user: str, expected_pass: str) -> bool:
+    parsed = _parse_basic_auth(authorization)
+    if not parsed:
+        return False
+    user, pw = parsed
+    return hmac.compare_digest(user, expected_user) and hmac.compare_digest(pw, expected_pass)
 
 
 @app.route('/health', methods=['GET'])
@@ -141,6 +188,131 @@ def iap_grant():
         'credits_added': int(result.get('credits_added', 0) or 0),
         'balance': int(result.get('balance', 0) or 0),
     }), 200
+
+
+@app.route('/api/toss/disconnect', methods=['POST', 'GET'])
+def toss_disconnect():
+    """
+    Apps in Toss "연결 끊기(회원 탈퇴)" 콜백 엔드포인트.
+
+    - 콘솔에서 설정한 Basic Auth 자격증명을 검증합니다.
+    - 전달된 사용자 식별자(user_id/device_id/userKey 등)로 credits 데이터를 삭제합니다.
+    """
+    expected = _expected_disconnect_basic_auth()
+    allow_insecure = _env_flag('ALLOW_INSECURE_DISCONNECT_NO_AUTH', default=False)
+
+    if expected:
+        exp_user, exp_pass = expected
+        if not _verify_basic_auth(request.headers.get('Authorization'), exp_user, exp_pass):
+            resp = jsonify({
+                'status': 'error',
+                'message': 'unauthorized',
+            })
+            resp.status_code = 401
+            resp.headers['WWW-Authenticate'] = 'Basic realm="toss-disconnect"'
+            return resp
+    else:
+        if not allow_insecure:
+            # Secure-by-default: require auth in prod.
+            return jsonify({
+                'status': 'error',
+                'message': 'disconnect callback auth not configured',
+            }), 500
+
+    payload = {}
+    if request.method == 'POST':
+        payload = request.get_json(silent=True) or {}
+        if not payload:
+            payload = {k: v for k, v in request.form.items()}
+
+    args = {k: v for k, v in request.args.items()}
+
+    # Do not log payload values (privacy). Optional debug prints only keys.
+    if _env_flag('DEBUG_DISCONNECT_CALLBACK_KEYS', default=False):
+        try:
+            print(f"[disconnect] method={request.method} keys={list(payload.keys())} query_keys={list(args.keys())}")
+        except Exception:
+            pass
+
+    def _pick(d: dict, key: str):
+        if not isinstance(d, dict):
+            return None
+        v = d.get(key)
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s if s else None
+
+    # Try common keys used by Apps in Toss / integrations.
+    candidate_keys = [
+        'user_id', 'userId',
+        'device_id', 'deviceId',
+        'userKey', 'user_key',
+        'memberId', 'member_id',
+    ]
+
+    candidates = []
+    for k in candidate_keys:
+        v = _pick(payload, k)
+        if v:
+            candidates.append(v)
+    for parent in ('data', 'user', 'member'):
+        nested = payload.get(parent) if isinstance(payload, dict) else None
+        if isinstance(nested, dict):
+            for k in candidate_keys:
+                v = _pick(nested, k)
+                if v:
+                    candidates.append(v)
+    for k in candidate_keys:
+        v = _pick(args, k)
+        if v:
+            candidates.append(v)
+
+    # Also accept some header-based identifiers (rare).
+    for hk in ('X-User-Id', 'X-Device-Id', 'X-User-Key', 'X-Toss-User-Key'):
+        hv = (request.headers.get(hk) or '').strip()
+        if hv:
+            candidates.append(hv)
+
+    # Deduplicate (preserve order)
+    seen = set()
+    user_ids = []
+    for c in candidates:
+        if not c:
+            continue
+        c2 = c[:256]  # avoid unbounded input
+        if c2 in seen:
+            continue
+        seen.add(c2)
+        user_ids.append(c2)
+
+    purged = 0
+    debug_details = _env_flag('DEBUG_DISCONNECT_CALLBACK_KEYS', default=False)
+    details = []
+    for uid in user_ids:
+        try:
+            res = credits_storage.purge_user(uid, keep_iap_order_ids=True)
+            changed = int(res.get('credits_deleted', 0) or 0) + int(res.get('ledger_deleted', 0) or 0) + int(res.get('orders_changed', 0) or 0)
+            if changed > 0:
+                purged += 1
+            if debug_details:
+                details.append({
+                    'credits_deleted': res.get('credits_deleted', 0),
+                    'ledger_deleted': res.get('ledger_deleted', 0),
+                    'orders_changed': res.get('orders_changed', 0),
+                })
+        except Exception:
+            # Be idempotent/resilient: do not fail the callback on storage errors.
+            continue
+
+    response = {
+        'status': 'success',
+        'purged_users': purged,
+    }
+    if debug_details:
+        response['details'] = details
+
+    return jsonify(response), 200
 
 
 @app.route('/api/check-pdf', methods=['POST'])

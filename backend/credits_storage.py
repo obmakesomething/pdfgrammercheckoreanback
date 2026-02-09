@@ -210,3 +210,40 @@ class CreditsStorage:
                 conn.execute("ROLLBACK;")
                 raise
 
+    def purge_user(self, user_id: str, keep_iap_order_ids: bool = True) -> Dict[str, Any]:
+        """
+        Delete/anonymize data for a user (used for "disconnect/unlink" callbacks).
+
+        - Deletes credit balance + ledger for the user.
+        - By default, keeps IAP order_id rows to prevent replay/double-grant,
+          but anonymizes the `user_id` on those rows.
+        """
+        if not user_id:
+            raise ValueError("user_id is required")
+
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE;")
+            try:
+                credits_deleted = conn.execute("DELETE FROM credits WHERE user_id = ?", (user_id,)).rowcount
+                ledger_deleted = conn.execute("DELETE FROM credit_ledger WHERE user_id = ?", (user_id,)).rowcount
+
+                orders_changed = 0
+                if keep_iap_order_ids:
+                    # Keep order_id rows to preserve idempotency, but remove per-user association.
+                    orders_changed = conn.execute(
+                        "UPDATE iap_orders SET user_id = ? WHERE user_id = ?",
+                        ("deleted", user_id),
+                    ).rowcount
+                else:
+                    orders_changed = conn.execute("DELETE FROM iap_orders WHERE user_id = ?", (user_id,)).rowcount
+
+                conn.execute("COMMIT;")
+                return {
+                    "purged": True,
+                    "credits_deleted": int(credits_deleted or 0),
+                    "ledger_deleted": int(ledger_deleted or 0),
+                    "orders_changed": int(orders_changed or 0),
+                }
+            except Exception:
+                conn.execute("ROLLBACK;")
+                raise
