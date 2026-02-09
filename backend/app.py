@@ -108,6 +108,11 @@ def _parse_basic_auth(authorization: Optional[str]) -> Optional[Tuple[str, str]]
     token = parts[1].strip()
     if not token:
         return None
+    # Some webhook providers may (incorrectly) send "Basic user:pass" without base64.
+    # Be tolerant: if it contains a colon, treat it as plaintext.
+    if ':' in token:
+        u, p = token.split(':', 1)
+        return (u, p)
     try:
         decoded = base64.b64decode(token).decode('utf-8')
     except Exception:
