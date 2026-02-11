@@ -1,9 +1,24 @@
 export const TOSS_MINIAPP_NAME = 'pdfgrammercheckorean'
 export const TOSS_DEEP_LINK = `intoss://${TOSS_MINIAPP_NAME}`
+export const TOSS_INSTALL_URL = 'https://toss.im'
 
 export function openDeepLink(url: string): void {
+  if (typeof window === 'undefined') return
+
   // NOTE: Browsers may block scheme navigations without user gesture.
-  // We still attempt it, and provide a manual button in UI.
+  // Try multiple navigation strategies to maximize open success.
+  const iframe = document.createElement('iframe')
+  iframe.style.display = 'none'
+  iframe.src = url
+  document.body.appendChild(iframe)
+
+  window.setTimeout(() => {
+    try {
+      iframe.remove()
+    } catch {
+      // no-op
+    }
+  }, 1200)
+
   window.location.href = url
 }
-

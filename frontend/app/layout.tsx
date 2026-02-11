@@ -1,10 +1,13 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Noto_Sans_KR } from 'next/font/google'
 import './globals.css'
 import Script from 'next/script'
 import ServiceShutdownOverlay from '@/components/ServiceShutdownOverlay'
 
-const inter = Inter({ subsets: ['latin'] })
+const notoSansKr = Noto_Sans_KR({
+  subsets: ['latin'],
+  weight: ['400', '500', '700', '900'],
+})
 
 export const metadata: Metadata = {
   title: 'PDF 한국어 맞춤법 검사기 - 무료 온라인 PDF 맞춤법 교정',
@@ -79,7 +82,7 @@ export default function RootLayout({
           strategy="beforeInteractive"
         />
       </head>
-      <body className={inter.className}>
+      <body className={notoSansKr.className}>
         <ServiceShutdownOverlay />
         {children}
       </body>
