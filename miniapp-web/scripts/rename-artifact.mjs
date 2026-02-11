@@ -5,6 +5,7 @@ const cwd = process.cwd()
 
 const src = path.join(cwd, 'pdfgrammercheckorean.ait')
 const dest = path.join(cwd, 'pdgrammercheckorean.ait')
+const rootCopy = path.join(cwd, '..', 'pdgrammercheckorean.ait')
 
 async function exists(p) {
   try {
@@ -16,16 +17,24 @@ async function exists(p) {
 }
 
 async function main() {
-  if (!(await exists(src))) {
-    // Nothing to rename.
+  if (await exists(src)) {
+    if (await exists(dest)) {
+      await fs.unlink(dest)
+    }
+
+    await fs.rename(src, dest)
+  }
+
+  if (!(await exists(dest))) {
+    // Nothing to copy.
     return
   }
 
-  if (await exists(dest)) {
-    await fs.unlink(dest)
+  if (await exists(rootCopy)) {
+    await fs.unlink(rootCopy)
   }
 
-  await fs.rename(src, dest)
+  await fs.copyFile(dest, rootCopy)
 }
 
 main().catch((err) => {

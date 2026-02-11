@@ -67,3 +67,6 @@ temp/
 # Miniapp-web helper code (Vite/React). Root ignores `lib/` globally, so unignore this path explicitly.
 !miniapp-web/src/lib/
 !miniapp-web/src/lib/**
+
+# Built Apps in Toss artifact (local upload file)
+pdgrammercheckorean.ait
