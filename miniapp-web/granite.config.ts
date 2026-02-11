@@ -5,8 +5,8 @@ export default defineConfig({
   brand: {
     displayName: 'PDF 한국어 맞춤법 검사기',
     primaryColor: '#3182F6', // 화면에 노출될 앱의 기본 색상으로 바꿔주세요.
-    // Early-stage: can be empty string. Replace with a real icon URL before review.
-    icon: '',
+    // Public, unsigned icon URL (required for review readiness)
+    icon: 'https://www.pdfgrammercheckorean.site/android-chrome-192x192.png',
   },
   web: {
     host: 'localhost',
