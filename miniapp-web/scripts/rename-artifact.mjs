@@ -47,17 +47,21 @@ async function readPrivateDeepLink() {
 }
 
 async function main() {
-  if (await exists(src)) {
-    if (await exists(dest)) {
-      await fs.unlink(dest)
-    }
-
-    await fs.rename(src, dest)
+  if (!(await exists(src))) {
+    throw new Error(
+      `AIT artifact was not produced.\nExpected: ${src}\n` +
+        `Check that 'granite build' succeeded and produces an .ait for appName 'pdfgrammercheckorean'.`
+    )
   }
 
+  if (await exists(dest)) {
+    await fs.unlink(dest)
+  }
+
+  await fs.rename(src, dest)
+
   if (!(await exists(dest))) {
-    // Nothing to copy.
-    return
+    throw new Error(`AIT artifact rename failed.\nExpected: ${dest}`)
   }
 
   if (await exists(rootCopy)) {
@@ -65,6 +69,10 @@ async function main() {
   }
 
   await fs.copyFile(dest, rootCopy)
+
+  if (!(await exists(rootCopy))) {
+    throw new Error(`AIT artifact copy-to-root failed.\nExpected: ${rootCopy}`)
+  }
 
   const privateDeepLink = await readPrivateDeepLink()
   if (!privateDeepLink) return
