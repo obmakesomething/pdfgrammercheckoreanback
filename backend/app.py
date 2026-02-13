@@ -65,7 +65,9 @@ def _infer_credits_from_sku(sku: str) -> int:
     """Fallback: infer credits from SKU name like CREDIT_5 -> 5."""
     if not sku:
         return 0
-    m = re.search(r'(\\d+)', sku)
+    # Be conservative: only infer when SKU explicitly includes "credit"/"credits"
+    # to avoid accidentally parsing other numeric tokens (e.g. price, limits).
+    m = re.search(r'(?i)credit(?:s)?[_-]?(\d+)', sku)
     if not m:
         return 1
     try:
