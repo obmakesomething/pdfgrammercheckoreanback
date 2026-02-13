@@ -2,36 +2,35 @@ const TOSS_DEEP_LINK = 'intoss://pdfgrammercheckorean'
 
 export default function Home() {
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8 space-y-5">
-        <div className="space-y-2">
-          <p className="text-sm font-semibold text-red-600">서비스 종료</p>
-          <h1 className="text-3xl font-bold text-gray-900">PDF 한국어 맞춤법 검사기</h1>
-          <p className="text-gray-600">
-            웹 서비스는 종료되었습니다. Toss 앱에서 미니앱으로 이용해주세요.
-          </p>
-        </div>
+    <main className="relative min-h-screen overflow-hidden bg-[#071226]">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-20 top-16 h-80 w-80 rounded-full bg-cyan-500/20 blur-3xl" />
+        <div className="absolute -right-20 bottom-10 h-96 w-96 rounded-full bg-blue-600/20 blur-3xl" />
+      </div>
 
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-          <p className="text-sm text-gray-700">
-            아래 버튼을 눌러 Toss로 이동할 수 있습니다.
+      <div className="relative mx-auto flex min-h-screen w-full max-w-5xl items-center px-6 py-16">
+        <div className="w-full rounded-3xl border border-white/15 bg-white/10 p-8 backdrop-blur-sm sm:p-12">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-200">
+            SERVICE MIGRATION
           </p>
+          <h1 className="mt-3 text-4xl font-black leading-tight text-white sm:text-5xl">
+            PDF 맞춤법 검사는
+            <br />
+            이제 Apps in Toss 전용입니다
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-blue-100 sm:text-base">
+            기존 웹 서비스는 종료되었고, 현재는 Toss 미니앱에서만 사용할 수 있습니다.
+            화면 상단의 안내 모달이 자동으로 앱 이동을 시도합니다.
+          </p>
+
           <a
             href={TOSS_DEEP_LINK}
-            className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-white font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"
+            className="mt-8 inline-flex items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-400/15 px-6 py-3 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/20"
           >
-            Toss에서 열기
+            수동으로 앱 열기
           </a>
-          <p className="mt-3 text-xs text-gray-500 break-all">
-            딥링크: {TOSS_DEEP_LINK}
-          </p>
         </div>
-
-        <p className="text-xs text-gray-500">
-          자동으로 열리지 않으면, Toss 앱 설치 여부를 확인 후 다시 시도해주세요.
-        </p>
       </div>
     </main>
   )
 }
-
