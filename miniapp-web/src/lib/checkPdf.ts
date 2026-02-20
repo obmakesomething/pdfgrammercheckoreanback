@@ -114,6 +114,19 @@ type CheckPdfParams = {
   fetchImpl?: typeof fetch
 }
 
+function isLikelyNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  if (error.name === 'AbortError') return true
+  if (error instanceof TypeError) return true
+
+  const msg = error.message.toLowerCase()
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('load failed')
+  )
+}
+
 export async function checkPdf({ apiBaseUrl, file, deviceId, fetchImpl = fetch }: CheckPdfParams): Promise<CheckPdfResult> {
   const url = new URL('/api/check-pdf', apiBaseUrl)
 
@@ -123,10 +136,29 @@ export async function checkPdf({ apiBaseUrl, file, deviceId, fetchImpl = fetch }
     formData.append('device_id', deviceId)
   }
 
-  const response = await fetchImpl(url.toString(), {
-    method: 'POST',
-    body: formData,
-  })
+  let response: Response
+  try {
+    response = await fetchImpl(url.toString(), {
+      method: 'POST',
+      body: formData,
+    })
+  } catch (error) {
+    // Some app webviews intermittently fail with a transport-level fetch error.
+    // Retry once before surfacing a user-facing error.
+    if (!isLikelyNetworkError(error)) throw error
+
+    try {
+      response = await fetchImpl(url.toString(), {
+        method: 'POST',
+        body: formData,
+      })
+    } catch (retryError) {
+      if (isLikelyNetworkError(retryError)) {
+        throw new Error('네트워크 연결이 원활하지 않습니다. 잠시 후 다시 시도해주세요.')
+      }
+      throw retryError
+    }
+  }
 
   if (!response.ok) {
     const contentType = response.headers.get('Content-Type') || ''

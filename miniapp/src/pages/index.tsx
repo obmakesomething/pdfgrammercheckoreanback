@@ -13,7 +13,7 @@ function Page() {
   return (
     <View style={styles.container}>
       <Top
-        title={<Txt typography="t2" fontWeight="bold">PDF 한국어 맞춤법 검사기</Txt>}
+        title={<Txt typography="t2" fontWeight="bold">PDF 맞춤법 검사기</Txt>}
         subtitle1={
           <Txt typography="t6" color="#6B7280">
             웹 서비스는 종료되었고, 이제 Toss 미니앱에서 제공됩니다.

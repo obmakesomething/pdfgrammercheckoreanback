@@ -10,10 +10,10 @@ export default defineConfig({
     appsInToss({
       brand: {
         // NOTE: appsInToss 콘솔에 노출될 이름 (한글 권장)
-        displayName: 'PDF 한국어 맞춤법 검사기',
+        displayName: 'PDF 맞춤법 검사기',
         primaryColor: '#3182F6',
-        // Early-stage: can be empty string. Replace with a real icon URL before review.
-        icon: '',
+        // Public, unsigned icon URL (review-ready)
+        icon: 'https://www.pdfgrammercheckorean.site/android-chrome-192x192.png',
       },
       permissions: [],
     }),

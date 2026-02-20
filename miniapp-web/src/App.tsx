@@ -337,7 +337,7 @@ function App() {
   return (
     <div className="app">
       <header className="hero">
-        <h1 className="title">PDF 한국어 맞춤법 검사기</h1>
+        <h1 className="title">PDF 맞춤법 검사기</h1>
         <p className="subtitle">
           PDF를 업로드하면, 오류가 표시된 PDF를 저장할 수 있어요.
         </p>

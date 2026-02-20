@@ -161,4 +161,54 @@ describe('checkPdf', () => {
 
     expect(result.type).toBe('ok')
   })
+
+  it('retries once when fetch throws a network error', async () => {
+    const file = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], 'input.pdf', {
+      type: 'application/pdf',
+    })
+
+    let callCount = 0
+    const mockFetch: typeof fetch = async () => {
+      callCount += 1
+      if (callCount === 1) {
+        throw new TypeError('Failed to fetch')
+      }
+
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'X-Errors-Found': '0',
+          'Content-Disposition': 'attachment; filename="grammar_checked.pdf"',
+        },
+      })
+    }
+
+    const result = await checkPdf({
+      apiBaseUrl: 'https://api.example.com',
+      file,
+      fetchImpl: mockFetch,
+    })
+
+    expect(callCount).toBe(2)
+    expect(result.type).toBe('ok')
+  })
+
+  it('throws a readable Korean message when network remains unavailable', async () => {
+    const file = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], 'input.pdf', {
+      type: 'application/pdf',
+    })
+
+    const mockFetch: typeof fetch = async () => {
+      throw new TypeError('Failed to fetch')
+    }
+
+    await expect(
+      checkPdf({
+        apiBaseUrl: 'https://api.example.com',
+        file,
+        fetchImpl: mockFetch,
+      })
+    ).rejects.toThrow('네트워크 연결이 원활하지 않습니다')
+  })
 })

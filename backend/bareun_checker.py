@@ -17,6 +17,13 @@ except ImportError:
     BAREUN_AVAILABLE = False
     print("경고: bareunpy 라이브러리가 설치되지 않았습니다")
 
+try:
+    from hanspell_checker import IntegratedSpellChecker
+    FALLBACK_AVAILABLE = True
+except Exception as _fallback_import_error:
+    FALLBACK_AVAILABLE = False
+    print(f"경고: 폴백 맞춤법 검사기 로드 실패: {_fallback_import_error}")
+
 
 class BareunSpellChecker:
     """바른 API를 사용한 맞춤법 검사기"""
@@ -152,20 +159,54 @@ class IntegratedBareunChecker:
     """바른 API 기반 맞춤법 검사기"""
 
     def __init__(self):
-        # 바른 API 초기화
-        self.bareun = BareunSpellChecker()
-        print("✓ 바른 API 사용 가능")
+        self.bareun = None
+        self.fallback = None
+
+        # Primary: Bareun API
+        try:
+            self.bareun = BareunSpellChecker()
+            print("✓ 바른 API 사용 가능")
+        except Exception as e:
+            print(f"⚠ 바른 API 초기화 실패 (폴백으로 계속 진행): {e}")
+
+        # Fallback: Naver/Pusan/local rules
+        if FALLBACK_AVAILABLE:
+            try:
+                self.fallback = IntegratedSpellChecker()
+                print("✓ 폴백 맞춤법 검사기 사용 가능")
+            except Exception as e:
+                print(f"⚠ 폴백 맞춤법 검사기 초기화 실패: {e}")
+        else:
+            print("⚠ 폴백 맞춤법 검사기를 사용할 수 없습니다")
 
     def check(self, text: str) -> List[Dict]:
-        """맞춤법 검사 (바른 API만 사용)"""
-        try:
-            errors = self.bareun.check(text)
-            if errors:
-                print(f"  바른 API: {len(errors)}개 오류 발견")
-            return errors
-        except Exception as e:
-            print(f"  바른 API 오류: {e}")
-            raise  # 오류 발생 시 예외를 상위로 전파
+        """맞춤법 검사 (바른 API 우선, 실패 시 폴백)"""
+        if not text or len(text.strip()) == 0:
+            return []
+
+        # 1) Bareun first
+        if self.bareun is not None:
+            try:
+                errors = self.bareun.check(text)
+                if errors:
+                    print(f"  바른 API: {len(errors)}개 오류 발견")
+                return errors
+            except Exception as e:
+                print(f"  바른 API 오류(폴백 전환): {e}")
+
+        # 2) Fallback checker
+        if self.fallback is not None:
+            try:
+                errors = self.fallback.check(text)
+                if errors:
+                    print(f"  폴백 검사기: {len(errors)}개 오류 발견")
+                return errors
+            except Exception as e:
+                print(f"  폴백 검사기 오류: {e}")
+
+        # 3) Last-resort availability: do not fail whole request.
+        print("  사용 가능한 맞춤법 검사기가 없어 빈 결과를 반환합니다")
+        return []
 
 
 # 테스트
