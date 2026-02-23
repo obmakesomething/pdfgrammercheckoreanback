@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { Noto_Sans_KR } from 'next/font/google'
 import './globals.css'
 import Script from 'next/script'
-import ServiceShutdownOverlay from '@/components/ServiceShutdownOverlay'
 
 const notoSansKr = Noto_Sans_KR({
   subsets: ['latin'],
@@ -82,10 +81,7 @@ export default function RootLayout({
           strategy="beforeInteractive"
         />
       </head>
-      <body className={notoSansKr.className}>
-        <ServiceShutdownOverlay />
-        {children}
-      </body>
+      <body className={notoSansKr.className}>{children}</body>
     </html>
   )
 }
